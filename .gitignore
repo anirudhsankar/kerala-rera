@@ -1,0 +1,49 @@
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local database (SQLite fallback for development)
+*.db
+*.sqlite
+*.sqlite3
+
+# Raw and processed datasets are generally NOT committed (large / regenerable).
+# Exception: the human-downloaded official export(s) placed in data/raw/manual/
+# are tracked intentionally so the repository is reproducible.
+data/raw/*
+!data/raw/.gitkeep
+!data/raw/manual/
+!data/raw/manual/.gitkeep
+!data/raw/manual/*.xlsx
+!data/raw/manual/*.xls
+!data/raw/manual/*.csv
+data/processed/*
+!data/processed/.gitkeep
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+desktop.ini
+
+# Frontend (Node)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+node_modules/

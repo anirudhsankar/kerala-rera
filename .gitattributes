@@ -1,0 +1,13 @@
+# Normalize line endings across platforms
+* text=auto eol=lf
+
+# Binary assets (never attempt text conversion)
+*.xlsx binary
+*.xls  binary
+*.png  binary
+*.ico  binary
+*.jpg  binary
+*.jpeg binary
+
+# Keep GeoJSON as text
+*.geojson text eol=lf

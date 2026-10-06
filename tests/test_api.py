@@ -1,0 +1,106 @@
+"""API tests using FastAPI's TestClient over a seeded fixture database."""
+
+from __future__ import annotations
+
+from datetime import date
+
+import pytest
+from fastapi.testclient import TestClient
+
+from rera.api.app import app
+from rera.api.deps import get_session
+from rera.database.models import Project, Promoter
+
+
+def _seed(session):
+    promoter = Promoter(canonical_name="Acme Builders", normalized_key="ACME BUILDERS")
+    session.add(promoter)
+    session.flush()
+    session.add_all(
+        [
+            Project(
+                rera_registration_number="R1",
+                project_name="Alpha",
+                district="Ernakulam",
+                project_type="Residential (Apartment)",
+                project_status="Completed",
+                certificate_date=date(2021, 5, 1),
+                declared_completion_date=date(2023, 1, 1),
+                total_units=100,
+                sold_units=40,
+                promoter_id=promoter.id,
+            ),
+            Project(
+                rera_registration_number="R2",
+                project_name="Beta",
+                district="Kollam",
+                project_type="Plots",
+                project_status="Inprogress",
+                total_units=None,
+                sold_units=5,
+            ),
+        ]
+    )
+    session.commit()
+
+
+@pytest.fixture()
+def client(session):
+    _seed(session)
+
+    def override():
+        yield session
+
+    app.dependency_overrides[get_session] = override
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
+
+
+def test_health(client):
+    assert client.get("/api/health").json() == {"status": "ok"}
+
+
+def test_overview(client):
+    body = client.get("/api/overview").json()
+    assert body["total_projects"] == 2
+    assert body["total_units"] == 100
+    assert body["sold_units"] == 45
+
+
+def test_districts(client):
+    body = client.get("/api/districts").json()
+    assert {d["district"] for d in body} == {"Ernakulam", "Kollam"}
+
+
+def test_district_not_found(client):
+    assert client.get("/api/districts/Nowhere").status_code == 404
+
+
+def test_builders(client):
+    body = client.get("/api/builders").json()
+    assert body[0]["name"] == "Acme Builders"
+    assert body[0]["projects"] == 1
+
+
+def test_projects_search_and_detail(client):
+    page = client.get("/api/projects", params={"district": "Ernakulam"}).json()
+    assert page["total"] == 1
+    assert page["items"][0]["rera_registration_number"] == "R1"
+
+    detail = client.get(
+        "/api/project", params={"registration_number": "R1"}
+    ).json()
+    assert detail["project_name"] == "Alpha"
+    assert detail["promoter_canonical_name"] == "Acme Builders"
+
+
+def test_project_not_found(client):
+    response = client.get("/api/project", params={"registration_number": "missing"})
+    assert response.status_code == 404
+
+
+def test_filters_and_baseline(client):
+    filters = client.get("/api/filters").json()
+    assert "Ernakulam" in filters["districts"]
+    assert client.get("/api/baseline").json() is None

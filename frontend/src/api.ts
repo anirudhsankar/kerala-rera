@@ -1,0 +1,233 @@
+import { useEffect, useState } from "react";
+
+const BASE = "/api";
+
+export async function api<T>(
+  path: string,
+  params?: Record<string, unknown>,
+): Promise<T> {
+  const url = new URL(BASE + path, window.location.origin);
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null && value !== "") {
+        url.searchParams.set(key, String(value));
+      }
+    }
+  }
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    throw new Error(`${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as T;
+}
+
+export function useApi<T>(
+  path: string,
+  params?: Record<string, unknown>,
+): { data: T | null; error: string | null; loading: boolean } {
+  const [data, setData] = useState<T | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const key = JSON.stringify(params ?? {});
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    api<T>(path, params)
+      .then((result) => {
+        if (active) {
+          setData(result);
+          setError(null);
+        }
+      })
+      .catch((err: unknown) => {
+        if (active) setError(String(err));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, key]);
+
+  return { data, error, loading };
+}
+
+// ---- shared types ---------------------------------------------------------
+export interface Counted {
+  count: number;
+}
+export interface StatusCount {
+  status: string | null;
+  count: number;
+}
+export interface TypeCount {
+  type: string | null;
+  count: number;
+}
+
+export interface Overview {
+  total_projects: number;
+  total_units: number;
+  sold_units: number;
+  sell_through: number | null;
+  units_under_development: number;
+  projects_with_units: number;
+  projects_without_units: number;
+  declared_completion_date_passed: number;
+  by_status: StatusCount[];
+  by_type: TypeCount[];
+  derived_metrics: string[];
+}
+
+export interface PeriodCount {
+  period: string;
+  count: number;
+}
+export interface TimelineData {
+  granularity: string;
+  registrations: PeriodCount[];
+  declared_completions: PeriodCount[];
+  note: string;
+}
+
+export interface DistrictStat {
+  district: string | null;
+  projects: number;
+  total_units: number;
+  sold_units: number;
+  sell_through: number | null;
+  completed: number;
+  inprogress: number;
+}
+
+export interface DistrictDetail {
+  district: string;
+  summary: {
+    projects: number;
+    total_units: number;
+    sold_units: number;
+    sell_through: number | null;
+    completed: number;
+    inprogress: number;
+  };
+  by_type: TypeCount[];
+  taluks: { taluk: string; count: number }[];
+  top_builders: { promoter_id: number | null; name: string; projects: number }[];
+}
+
+export interface BuilderStat {
+  promoter_id: number;
+  name: string;
+  needs_review: boolean;
+  projects: number;
+  total_units: number;
+  sold_units: number;
+  sell_through: number | null;
+  districts: number;
+}
+
+export interface BuilderDetail {
+  promoter_id: number;
+  name: string;
+  needs_review: boolean;
+  match_method: string | null;
+  summary: {
+    projects: number;
+    total_units: number;
+    sold_units: number;
+    sell_through: number | null;
+  };
+  by_district: { district: string; count: number }[];
+  by_type: TypeCount[];
+  projects: ProjectBrief[];
+}
+
+export interface ProjectBrief {
+  rera_registration_number: string;
+  project_name: string | null;
+  promoter_name_raw: string | null;
+  promoter_id: number | null;
+  project_type: string | null;
+  project_status: string | null;
+  project_start_date: string | null;
+  declared_completion_date: string | null;
+  certificate_number: string | null;
+  certificate_date: string | null;
+  total_units: number | null;
+  sold_units: number | null;
+  district: string | null;
+  taluk: string | null;
+  village: string | null;
+}
+
+export interface ProjectDetail extends ProjectBrief {
+  promoter_canonical_name?: string | null;
+  not_seen_in_latest_run: boolean;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  last_checked_at: string | null;
+}
+
+export interface ProjectPage {
+  total: number;
+  limit: number;
+  offset: number;
+  items: ProjectBrief[];
+}
+
+export interface Snapshot {
+  id: number;
+  snapshot_date: string;
+  collected_at: string;
+  source_hash: string;
+  project_status: string | null;
+  declared_completion_date: string | null;
+  total_units: number | null;
+  sold_units: number | null;
+}
+
+export interface ChangeEvent {
+  id: number;
+  detected_at: string;
+  field_name: string;
+  old_value: string | null;
+  new_value: string | null;
+}
+
+export interface DQSummary {
+  total: number;
+  by_severity: Record<string, number>;
+  by_type: { issue_type: string; count: number }[];
+}
+
+export interface RunInfo {
+  id: number;
+  started_at: string;
+  completed_at: string | null;
+  status: string;
+  source: string;
+  collection_method: string;
+  parser_version: string;
+  records_found: number;
+  inserted: number;
+  updated: number;
+  unchanged: number;
+  failed: number;
+}
+
+export interface BaselineInfo {
+  baseline_at: string;
+  source: string;
+  record_count: number;
+  parser_version: string;
+  source_checksum: string;
+}
+
+export interface FilterOptions {
+  districts: string[];
+  types: string[];
+  statuses: string[];
+}
