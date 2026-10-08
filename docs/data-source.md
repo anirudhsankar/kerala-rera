@@ -81,3 +81,21 @@ Every record carries source information:
 * `project_snapshots.raw_record` (the full original row, verbatim)
 * `ingestion_runs.source_reference`, `collection_method`, `parser_version`
 * `data/raw/**/metadata.json` (URL/method/timestamp/HTTP status/checksum)
+
+
+## Official export endpoint (confirmed 2026-10-08)
+
+```
+https://rera.kerala.gov.in/export-projects
+  ?project_name=&registration_number=&district=&taluk=&village=&work_status=&from=&to=
+```
+
+The endpoint returns `HTTP 503` + a Prophaze anti-bot challenge to
+server-to-server requests, so it is **not used for automated download** (and
+`RERA_EXPORT_URL` is left empty). In a normal browser a human can download the
+export from it, optionally filtered by district / taluk / village / status /
+date range.
+
+**Ingest an unfiltered register export** for the reconciliation pipeline.
+Filtered exports are for ad-hoc analysis only — ingesting one as if it were the
+full register would flag the other projects as `not_seen_in_latest_run`.

@@ -1,4 +1,5 @@
 import { Link, useSearchParams } from "react-router-dom";
+import { EChart } from "../components/EChart";
 import { Card, ErrorBox, Loader, Table, fmtDate, fmtInt, type Column } from "../components/ui";
 import { useApi, type ChangeEvent, type ProjectDetail, type Snapshot } from "../api";
 
@@ -86,6 +87,37 @@ export default function ProjectDetailPage() {
 
         <Card title="History" subtitle="Immutable snapshots (one per observed change)">
           {history.loading && <Loader />}
+          {!history.loading && (history.data?.length ?? 0) > 0 && (
+            <EChart
+              height={240}
+              option={{
+                tooltip: { trigger: "axis" },
+                legend: { bottom: 0 },
+                grid: { left: 46, right: 20, top: 16, bottom: 46 },
+                xAxis: {
+                  type: "category",
+                  data: (history.data ?? []).map((s) => fmtDate(s.collected_at)),
+                },
+                yAxis: { type: "value" },
+                series: [
+                  {
+                    name: "Units planned",
+                    type: "line",
+                    connectNulls: true,
+                    itemStyle: { color: "#0ea5e9" },
+                    data: (history.data ?? []).map((s) => s.total_units),
+                  },
+                  {
+                    name: "Units sold",
+                    type: "line",
+                    connectNulls: true,
+                    itemStyle: { color: "#0d7a6f" },
+                    data: (history.data ?? []).map((s) => s.sold_units),
+                  },
+                ],
+              }}
+            />
+          )}
           {!history.loading && (
             <Table
               columns={snapshotColumns}

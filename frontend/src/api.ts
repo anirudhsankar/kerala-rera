@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 
-const BASE = "/api";
+const API_ORIGIN = import.meta.env.VITE_API_BASE ?? "";
 
 export async function api<T>(
   path: string,
   params?: Record<string, unknown>,
 ): Promise<T> {
-  const url = new URL(BASE + path, window.location.origin);
+  const url = new URL(`${API_ORIGIN}/api${path}`, window.location.origin);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null && value !== "") {
@@ -296,4 +296,39 @@ export interface NewProjects {
   since: string;
   total: number;
   items: ProjectBrief[];
+}
+
+// ---- history --------------------------------------------------------------
+export interface ChangeRow {
+  id: number;
+  project_id: number;
+  rera_registration_number: string;
+  project_name: string | null;
+  district: string | null;
+  taluk: string | null;
+  detected_at: string;
+  field_name: string;
+  old_value: string | null;
+  new_value: string | null;
+  source_last_modified_date: string | null;
+}
+
+export interface ChangeEventPage {
+  total: number;
+  limit: number;
+  offset: number;
+  items: ChangeRow[];
+}
+
+export interface HistorySummary {
+  total_changes: number;
+  projects_changed: number;
+  first_change_at: string | null;
+  last_change_at: string | null;
+  changes_by_month: PeriodCount[];
+  changes_by_field: { field_name: string; count: number }[];
+  status_transitions: { from: string | null; to: string | null; count: number }[];
+  snapshots_by_month: PeriodCount[];
+  baseline_at: string | null;
+  note: string;
 }

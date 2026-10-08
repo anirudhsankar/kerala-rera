@@ -6,7 +6,7 @@ never returns interpretive judgements such as "delayed" or "bad promoter".
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from rera.analytics import queries
 from rera.api.deps import get_session
+from rera.config import get_settings
 
 app = FastAPI(
     title="Kerala RERA Intelligence API",
@@ -27,12 +28,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:4173",
-        "http://127.0.0.1:4173",
-    ],
+    allow_origins=get_settings().cors_origin_list,
     allow_methods=["GET"],
     allow_headers=["*"],
 )
@@ -218,3 +214,29 @@ def baseline(session: SessionDep) -> dict | None:
 @app.get("/api/data-quality/summary", tags=["meta"])
 def data_quality(session: SessionDep) -> dict:
     return queries.data_quality_summary(session)
+
+
+@app.get("/api/changes", tags=["history"])
+def changes(
+    session: SessionDep,
+    district: str | None = None,
+    taluk: str | None = None,
+    field_name: str | None = None,
+    since: datetime | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict:
+    return queries.recent_changes(
+        session,
+        district=district,
+        taluk=taluk,
+        field_name=field_name,
+        since=since,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/api/history/summary", tags=["history"])
+def history_summary(session: SessionDep) -> dict:
+    return queries.history_summary(session)

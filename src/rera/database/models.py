@@ -165,8 +165,10 @@ class ProjectChangeEvent(Base):
         ForeignKey("ingestion_runs.id"), nullable=True
     )
 
-    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    field_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    detected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+    field_name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     old_value: Mapped[str | None] = mapped_column(Text)
     new_value: Mapped[str | None] = mapped_column(Text)
     source_last_modified_date: Mapped[date | None] = mapped_column(Date)
@@ -201,6 +203,7 @@ class IngestionRun(Base):
 
     errors_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     source_reference: Mapped[str | None] = mapped_column(Text)
+    source_checksum: Mapped[str | None] = mapped_column(String(128))
     error_summary: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

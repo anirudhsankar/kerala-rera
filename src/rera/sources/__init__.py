@@ -9,6 +9,7 @@ from rera.sources.base import (
     SourceUnavailableError,
 )
 from rera.sources.krera import (
+    KReraDownloadSource,
     KReraExportFileSource,
     KReraHttpSource,
     collection_method_for,
@@ -22,6 +23,7 @@ __all__ = [
     "SourceFormatError",
     "SourceMetadata",
     "SourceUnavailableError",
+    "KReraDownloadSource",
     "KReraExportFileSource",
     "KReraHttpSource",
     "collection_method_for",

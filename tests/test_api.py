@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from rera.api.app import app
 from rera.api.deps import get_session
-from rera.database.models import Project, Promoter
+from rera.database.models import Project, ProjectChangeEvent, Promoter
 
 
 def _seed(session):
@@ -44,6 +45,20 @@ def _seed(session):
                 sold_units=5,
             ),
         ]
+    )
+    session.commit()
+
+    project = session.execute(
+        select(Project).where(Project.rera_registration_number == "R1")
+    ).scalar_one()
+    session.add(
+        ProjectChangeEvent(
+            project_id=project.id,
+            field_name="sold_units",
+            old_value="10",
+            new_value="40",
+            detected_at=datetime(2026, 1, 10, tzinfo=UTC),
+        )
     )
     session.commit()
 
@@ -138,3 +153,12 @@ def test_filters_cascade(client):
         "/api/filters", params={"district": "Ernakulam", "taluk": "Kanayannur"}
     ).json()
     assert "KAKKANAD" in body2["villages"]
+
+
+def test_changes_and_history(client):
+    body = client.get("/api/changes").json()
+    assert body["total"] >= 1
+    assert body["items"][0]["field_name"] == "sold_units"
+    summary = client.get("/api/history/summary").json()
+    assert summary["total_changes"] >= 1
+    assert summary["projects_changed"] >= 1

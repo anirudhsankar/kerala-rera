@@ -11,7 +11,7 @@ reports factual counts (e.g. "declared completion date has passed").
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import case, extract, func, or_, select
@@ -826,3 +826,122 @@ def recent_projects(
         "items": [_project_brief(p) for p in items],
     }
 
+
+
+# ---------------------------------------------------------------------------
+# History (changes across projects over time)
+# ---------------------------------------------------------------------------
+def recent_changes(
+    session: Session,
+    *,
+    district: str | None = None,
+    taluk: str | None = None,
+    field_name: str | None = None,
+    since: datetime | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> dict[str, Any]:
+    filters: list[Any] = []
+    if district:
+        filters.append(Project.district == district)
+    if taluk:
+        filters.append(Project.taluk == taluk)
+    if field_name:
+        filters.append(ProjectChangeEvent.field_name == field_name)
+    if since:
+        filters.append(ProjectChangeEvent.detected_at >= since)
+
+    joined = select(ProjectChangeEvent, Project).join(
+        Project, Project.id == ProjectChangeEvent.project_id
+    )
+    total = session.execute(
+        select(func.count())
+        .select_from(ProjectChangeEvent)
+        .join(Project, Project.id == ProjectChangeEvent.project_id)
+        .where(*filters)
+    ).scalar_one()
+    rows = session.execute(
+        joined.where(*filters)
+        .order_by(ProjectChangeEvent.detected_at.desc())
+        .limit(limit)
+        .offset(offset)
+    ).all()
+    items = [
+        {
+            "id": event.id,
+            "project_id": event.project_id,
+            "rera_registration_number": project.rera_registration_number,
+            "project_name": project.project_name,
+            "district": project.district,
+            "taluk": project.taluk,
+            "detected_at": _iso(event.detected_at),
+            "field_name": event.field_name,
+            "old_value": event.old_value,
+            "new_value": event.new_value,
+            "source_last_modified_date": _iso(event.source_last_modified_date),
+        }
+        for event, project in rows
+    ]
+    return {"total": total, "limit": limit, "offset": offset, "items": items}
+
+
+def history_summary(session: Session) -> dict[str, Any]:
+    total_changes = session.execute(
+        select(func.count()).select_from(ProjectChangeEvent)
+    ).scalar_one()
+    projects_changed = session.execute(
+        select(func.count(func.distinct(ProjectChangeEvent.project_id)))
+    ).scalar_one()
+    first_last = session.execute(
+        select(func.min(ProjectChangeEvent.detected_at), func.max(ProjectChangeEvent.detected_at))
+    ).one()
+
+    def _monthly(column) -> list[dict[str, Any]]:
+        year = extract("year", column)
+        month = extract("month", column)
+        rows = session.execute(
+            select(year, month, func.count())
+            .where(column.is_not(None))
+            .group_by(year, month)
+            .order_by(year, month)
+        ).all()
+        return [{"period": _period(y, m), "count": c} for y, m, c in rows]
+
+    by_field = [
+        {"field_name": field, "count": count}
+        for field, count in session.execute(
+            select(ProjectChangeEvent.field_name, func.count())
+            .group_by(ProjectChangeEvent.field_name)
+            .order_by(func.count().desc())
+        ).all()
+    ]
+    status_transitions = [
+        {"from": old, "to": new, "count": count}
+        for old, new, count in session.execute(
+            select(
+                ProjectChangeEvent.old_value,
+                ProjectChangeEvent.new_value,
+                func.count(),
+            )
+            .where(ProjectChangeEvent.field_name == "project_status")
+            .group_by(ProjectChangeEvent.old_value, ProjectChangeEvent.new_value)
+            .order_by(func.count().desc())
+        ).all()
+    ]
+    base = session.execute(select(Baseline).order_by(Baseline.id).limit(1)).scalar_one_or_none()
+
+    return {
+        "total_changes": total_changes,
+        "projects_changed": projects_changed,
+        "first_change_at": _iso(first_last[0]),
+        "last_change_at": _iso(first_last[1]),
+        "changes_by_month": _monthly(ProjectChangeEvent.detected_at),
+        "changes_by_field": by_field,
+        "status_transitions": status_transitions,
+        "snapshots_by_month": _monthly(ProjectSnapshot.collected_at),
+        "baseline_at": _iso(base.baseline_at) if base else None,
+        "note": (
+            "History is appended on every ingestion. Charts populate as new "
+            "exports are ingested; a single baseline produces one snapshot per project."
+        ),
+    }

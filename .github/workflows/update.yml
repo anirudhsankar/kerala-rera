@@ -1,0 +1,48 @@
+name: Scheduled data update
+
+on:
+  schedule:
+    # 03:00 UTC on the 1st of every month
+    - cron: "0 3 1 * *"
+  workflow_dispatch: {}
+
+jobs:
+  update:
+    name: Fetch + ingest + rebuild promoters
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[postgres]"
+
+      - name: Migrate (uses direct/session URL if provided)
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          MIGRATION_DATABASE_URL: ${{ secrets.SUPABASE_MIGRATION_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "SUPABASE_DATABASE_URL secret not set; skipping."; exit 0
+          fi
+          export DATABASE_URL="${MIGRATION_DATABASE_URL:-$DATABASE_URL}"
+          alembic upgrade head
+
+      - name: Update data
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          RERA_EXPORT_URL: ${{ secrets.RERA_EXPORT_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "SUPABASE_DATABASE_URL secret not set; skipping."; exit 0
+          fi
+          if [ -z "$RERA_EXPORT_URL" ]; then
+            echo "RERA_EXPORT_URL secret not set; cannot download automatically."
+            echo "Set it to a public export URL to enable full automation."
+            exit 0
+          fi
+          rera update

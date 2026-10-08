@@ -1,0 +1,21 @@
+# Render blueprint for the read-only analytics API.
+# Create the service from this file, then set the secret env vars in the dashboard.
+services:
+  - type: web
+    name: kerala-rera-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      # Supabase connection (pooler URL recommended for the app)
+      - key: DATABASE_URL
+        sync: false
+      # Least-privilege read-only role (falls back to DATABASE_URL if unset)
+      - key: READ_ONLY_DATABASE_URL
+        sync: false
+      # Comma-separated origins allowed to call the API (your Vercel domain)
+      - key: CORS_ORIGINS
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO

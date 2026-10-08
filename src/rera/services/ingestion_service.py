@@ -41,14 +41,14 @@ from rera.ingestion.change_detector import (
     normalized_values,
     project_values,
 )
-from rera.ingestion.collector import Collector
+from rera.ingestion.collector import CollectedData, Collector, save_raw_artifact
 from rera.ingestion.normalizer import NormalizedProject, compute_source_hash, normalize_record
 from rera.ingestion.parser import ParseError, RawProjectRecord, parse_records
 from rera.ingestion.quality import QualityIssue
 from rera.ingestion.snapshot import build_snapshot
 from rera.ingestion.validator import detect_duplicate_registrations, validate_record
 from rera.logging_config import get_logger
-from rera.sources.base import ReraSource
+from rera.sources.base import FetchResult, ReraSource
 from rera.sources.krera import collection_method_for
 
 logger = get_logger("rera.ingestion")
@@ -180,6 +180,7 @@ def run_ingestion(
     limit: int | None = None,
     full_snapshot: bool = True,
     collector: Collector | None = None,
+    prefetched: FetchResult | None = None,
 ) -> IngestionReport:
     """Execute one ingestion run.
 
@@ -219,9 +220,18 @@ def run_ingestion(
 
         logger.info("ingestion started", extra={"source": source.name, "dry_run": dry_run})
 
-        collected = collector.collect(
-            source, run_id=run.id if run else None, dry_run=dry_run
-        )
+        if prefetched is not None:
+            raw_path = save_raw_artifact(
+                prefetched.metadata,
+                prefetched.raw_bytes,
+                run_id=run.id if run else None,
+                base_path=collector.raw_base_path,
+            )
+            collected = CollectedData(fetch=prefetched, raw_path=raw_path)
+        else:
+            collected = collector.collect(
+                source, run_id=run.id if run else None, dry_run=dry_run
+            )
         fetch = collected.fetch
         report.raw_path = collected.raw_path
         report.source_reference = fetch.metadata.source_reference
@@ -466,6 +476,7 @@ def run_ingestion(
     run.records_failed = report.records_failed
     run.errors_count = report.errors
     run.source_reference = report.source_reference
+    run.source_checksum = fetch.metadata.checksum_sha256
     run.error_summary = report.error_summary
     session.commit()
     session.close()
@@ -484,6 +495,17 @@ def run_ingestion(
 # --------------------------------------------------------------------------
 # Reporting helpers (status / stats / export)
 # --------------------------------------------------------------------------
+def latest_source_checksum(engine: Engine | None = None) -> str | None:
+    """Return the source checksum of the most recent ingestion run."""
+
+    engine = engine or create_db_engine()
+    factory = create_session_factory(engine)
+    with factory() as session:
+        return session.execute(
+            select(IngestionRun.source_checksum).order_by(IngestionRun.id.desc()).limit(1)
+        ).scalar_one_or_none()
+
+
 def get_status(engine: Engine | None = None, limit: int = 10) -> dict[str, Any]:
     engine = engine or create_db_engine()
     factory = create_session_factory(engine)

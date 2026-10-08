@@ -216,3 +216,47 @@ Certificate No, Certificate Date, Total, Sold, Status, District, Village, Taluk
 > **Completeness note:** whether this export represents the full K-RERA
 > register cannot be confirmed from the file alone. The pipeline reports
 > exactly what the export contains.
+
+
+---
+
+## 8. Discovered export endpoint (2026-10-08)
+
+The public project register exposes an export endpoint:
+
+```
+https://rera.kerala.gov.in/export-projects
+  ?project_name=&registration_number=&district=&taluk=&village=&work_status=&from=&to=
+```
+
+**Observed result from a server-to-server request:** `HTTP 503` with the same
+**Prophaze BotModule** JavaScript/cookie challenge (body loads
+`prophaze-botmodule-static-assets.../aes.min.js` and sets a `BPC` cookie).
+
+**Conclusion:** the export endpoint is protected by the same anti-bot mechanism
+as the rest of the site. Automated download is therefore **not performed** — the
+project does not bypass anti-bot controls. `rera update` with `RERA_EXPORT_URL`
+set to this URL **fails safely**:
+
+```
+Anti-bot challenge detected at the export URL; automated download is not permitted.
+Provide the file manually instead.
+```
+
+The endpoint **is usable in a normal browser** (a human solves the challenge
+naturally), and its filter parameters are:
+
+| Param | Meaning |
+|-------|---------|
+| `project_name` | Filter by project name |
+| `registration_number` | Filter by RERA registration number |
+| `district` | Filter by district |
+| `taluk` | Filter by taluk |
+| `village` | Filter by village |
+| `work_status` | Filter by status |
+| `from`, `to` | Date range |
+
+> **Operational note:** ingest an **unfiltered** register export for the
+> reconciliation pipeline. A filtered export (e.g. one district) would be treated
+> as a full snapshot and would incorrectly flag other projects as
+> `not_seen_in_latest_run`. Use filtered exports only for ad-hoc analysis.

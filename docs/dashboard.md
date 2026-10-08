@@ -71,6 +71,7 @@ npm run build      # production build into frontend/dist
 | **Districts** | Kerala choropleth; projects / sell-through by district; full district table; drill-down per district (type, taluks, top builders) |
 | **Builders** | Top-15 chart; sortable leaderboard; concentration (top-10 share); builder detail with district footprint, type mix and projects |
 | **Projects** | Search + filters (district/type/status) with pagination; project detail with promoter link, immutable snapshot history and change events |
+| **History** | Cross-project change feed + trends (changes/month, by field, status transitions); project-level snapshot timeline |
 | **Data & provenance** | Data-quality findings, ingestion runs, baseline, source caveats |
 
 ---
@@ -159,6 +160,19 @@ GET /api/projects/new?district=&taluk=&village=&months=&limit=
 
 `/api/projects` and `/api/filters` also accept `taluk`/`village` for cascading
 filters and filtering.
+
+## History API
+
+```
+GET /api/changes?district=&taluk=&field_name=&since=&limit=&offset=
+GET /api/history/summary
+GET /api/project/history?registration_number=...
+GET /api/project/changes?registration_number=...
+```
+
+History is append-only: `project_snapshots` and `project_change_events` are never
+modified or deleted. Charts populate as new exports are ingested; a single
+baseline yields one snapshot per project.
 
 ---
 

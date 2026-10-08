@@ -39,6 +39,10 @@ class Settings(BaseSettings):
 
     # Source
     rera_base_url: str = Field(default="https://rera.kerala.gov.in")
+    rera_export_url: str | None = Field(
+        default=None,
+        description="Optional public export URL for automated download (empty = manual file).",
+    )
     rera_request_delay_seconds: float = Field(default=2.0, ge=0)
     rera_max_retries: int = Field(default=3, ge=0)
     rera_timeout_seconds: int = Field(default=30, gt=0)
@@ -54,6 +58,19 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = Field(default="INFO")
+
+    # API
+    cors_origins: str = Field(
+        default=(
+            "http://localhost:5173,http://127.0.0.1:5173,"
+            "http://localhost:4173,http://127.0.0.1:4173"
+        ),
+        description="Comma-separated list of allowed CORS origins for the API.",
+    )
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
     # Parser
     parser_version: str = Field(default="1.0.0")

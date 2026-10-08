@@ -18,6 +18,7 @@ Two adapters are provided:
 from __future__ import annotations
 
 import hashlib
+import io
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -242,6 +243,130 @@ class KReraHttpSource(ReraSource):
 def collection_method_for(source: ReraSource) -> str:
     if isinstance(source, KReraExportFileSource):
         return COLLECTION_METHOD_FILE
-    if isinstance(source, KReraHttpSource):
+    if isinstance(source, (KReraHttpSource, KReraDownloadSource)):
         return COLLECTION_METHOD_HTTP
     return source.name
+
+
+def _suffix_for(url: str, content_type: str | None) -> str:
+    from urllib.parse import urlparse
+
+    path = urlparse(url).path.lower()
+    for ext in (".xlsx", ".xlsm", ".xls", ".csv", ".txt"):
+        if path.endswith(ext):
+            return ext
+    content_type = (content_type or "").lower()
+    if "spreadsheet" in content_type or "excel" in content_type:
+        return ".xlsx"
+    if "csv" in content_type or "text/plain" in content_type:
+        return ".csv"
+    return ".xlsx"
+
+
+def _records_from_bytes(data: bytes, suffix: str) -> tuple[list[dict[str, Any]], list[str]]:
+    import pandas as pd
+
+    buffer = io.BytesIO(data)
+    try:
+        if suffix in {".csv", ".txt"}:
+            try:
+                frame = pd.read_csv(
+                    buffer, header=None, dtype=str, keep_default_na=False, encoding="utf-8-sig"
+                )
+            except UnicodeDecodeError:
+                buffer.seek(0)
+                frame = pd.read_csv(
+                    buffer, header=None, dtype=str, keep_default_na=False, encoding="latin-1"
+                )
+        elif suffix in {".xlsx", ".xlsm", ".xls"}:
+            frame = pd.read_excel(buffer, header=None, dtype=str, keep_default_na=False)
+        else:
+            raise SourceFormatError(f"Unsupported export format '{suffix}'.")
+    except SourceFormatError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise SourceFormatError(f"Could not parse downloaded export: {exc}") from exc
+
+    if frame is None or frame.empty:
+        raise SourceFormatError("Downloaded export contains no rows.")
+
+    grid = [
+        ["" if value is None else str(value) for value in row] for row in frame.values.tolist()
+    ]
+    built = build_records_from_grid(grid)
+    if not built.rows:
+        raise SourceFormatError("Downloaded export contains no data rows below the header.")
+    return built.rows, built.columns
+
+
+class KReraDownloadSource(ReraSource):
+    """Download the official export from a configured URL.
+
+    Intended for a genuinely public file endpoint. If the response is the
+    anti-bot challenge page, it fails safely rather than attempting to bypass.
+    """
+
+    name = "krera_download"
+
+    def __init__(self, url: str | None = None) -> None:
+        self.url = url or get_settings().rera_export_url
+
+    def fetch_export(self) -> FetchResult:
+        import time
+
+        import httpx
+
+        settings = get_settings()
+        if not self.url:
+            raise SourceUnavailableError("No RERA_EXPORT_URL configured.")
+
+        headers = {"User-Agent": settings.rera_user_agent, "Accept": "*/*"}
+        last_error: Exception | None = None
+        response: httpx.Response | None = None
+        for attempt in range(settings.rera_max_retries + 1):
+            try:
+                with httpx.Client(
+                    timeout=settings.rera_timeout_seconds,
+                    follow_redirects=True,
+                    headers=headers,
+                ) as client:
+                    response = client.get(self.url)
+                break
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                if attempt >= settings.rera_max_retries:
+                    raise SourceUnavailableError(f"Download failed: {exc}") from exc
+                time.sleep(settings.rera_request_delay_seconds * (2**attempt))
+
+        if response is None:
+            raise SourceUnavailableError(f"Download failed: {last_error}")
+
+        if _looks_like_challenge(response.text[:20000]):
+            raise SourceUnavailableError(
+                "Anti-bot challenge detected at the export URL; automated download "
+                "is not permitted. Provide the file manually instead."
+            )
+        if response.status_code != 200:
+            raise SourceUnavailableError(f"HTTP {response.status_code} downloading export")
+
+        data = response.content
+        if not data:
+            raise SourceUnavailableError("Empty response from export URL")
+
+        suffix = _suffix_for(self.url, response.headers.get("content-type"))
+        records, columns = _records_from_bytes(data, suffix)
+        now = datetime.now(UTC)
+        metadata = SourceMetadata(
+            source="K-RERA download",
+            collection_method=COLLECTION_METHOD_HTTP,
+            parser_version=settings.parser_version,
+            collected_at=now,
+            source_url=self.url,
+            source_reference=self.url,
+            file_name=f"krera_export_{now.date().isoformat()}{suffix}",
+            http_status=response.status_code,
+            record_count=len(records),
+            checksum_sha256=hashlib.sha256(data).hexdigest(),
+            raw_bytes_size=len(data),
+        )
+        return FetchResult(records=records, columns=columns, metadata=metadata, raw_bytes=data)

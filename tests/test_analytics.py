@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
+
+from sqlalchemy import select
 
 from rera.analytics import queries
 from rera.analytics.promoters import build_promoters, canonical_key
-from rera.database.models import Project, Promoter
+from rera.database.models import Project, ProjectChangeEvent, Promoter
 
 
 def _add(session, reg, **kwargs):
@@ -180,3 +182,31 @@ def test_recent_projects(session):
     recent = queries.recent_projects(session, months=120)
     assert recent["total"] == 3
     assert recent["items"][0]["rera_registration_number"] == "R3"
+
+
+def test_history_queries(session):
+    _seed(session)
+    project = session.execute(
+        select(Project).where(Project.rera_registration_number == "R1")
+    ).scalar_one()
+    session.add(
+        ProjectChangeEvent(
+            project_id=project.id,
+            field_name="project_status",
+            old_value="Ongoing",
+            new_value="Completed",
+            detected_at=datetime(2026, 1, 15, tzinfo=UTC),
+        )
+    )
+    session.commit()
+
+    changes = queries.recent_changes(session)
+    assert changes["total"] == 1
+    assert changes["items"][0]["field_name"] == "project_status"
+    assert changes["items"][0]["district"] == "Ernakulam"
+
+    summary = queries.history_summary(session)
+    assert summary["total_changes"] == 1
+    assert summary["projects_changed"] == 1
+    assert any(f["field_name"] == "project_status" for f in summary["changes_by_field"])
+    assert summary["status_transitions"][0]["count"] == 1

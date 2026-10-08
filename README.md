@@ -184,6 +184,9 @@ python -m rera.cli.main ingest --sample
 python -m rera.cli.main ingest
 python -m rera.cli.main ingest --source-file "C:\path\to\krera_export.xlsx"
 
+# One-shot update: download (if RERA_EXPORT_URL set) -> ingest -> rebuild promoters
+python -m rera.cli.main update
+
 # Preview without changing the database
 python -m rera.cli.main ingest --dry-run
 
@@ -291,13 +294,36 @@ npm install
 npm run dev                                   # http://localhost:5173
 ```
 
-Pages: **Overview**, **Districts** (choropleth + drill-down), **Builders**
-(leaderboard + detail), **Projects** (search/detail/history), and
-**Data & provenance**. See [`docs/dashboard.md`](docs/dashboard.md).
+Pages: **Overview**, **Find projects**, **Districts**, **Builders**,
+**Projects**, **History**, and **Data & provenance**. See
+[`docs/dashboard.md`](docs/dashboard.md).
 
 The dashboard is read-only and uses a least-privilege DB role
 (`READ_ONLY_DATABASE_URL`). It reports factual/derived metrics only and never
 labels a project "delayed" or a promoter "bad".
+
+---
+
+## Deployment
+
+Production target: **Vercel** (frontend) + **Supabase** (PostgreSQL) + **Render/Fly**
+(API) + **GitHub Actions** (monthly `rera update`). Scaffolding is included:
+`Dockerfile`, `render.yaml`, `frontend/vercel.json`, `.github/workflows/update.yml`.
+Step-by-step guide: [`docs/deploy.md`](docs/deploy.md).
+
+---
+
+## Keeping data up to date
+
+Because the K-RERA export is behind an anti-bot challenge, a **human downloads it in
+a browser**; the pipeline does the rest.
+
+1. Save the export to `data/raw/manual/krera_YYYY-MM.xlsx` (unfiltered).
+2. Run `rera update` — or let the **scheduled task** (`scripts\update.ps1`, daily) do it.
+3. `rera update` ingests new/changed projects (snapshots + change events), rebuilds
+   builder links, and **skips unchanged files**.
+
+See [`docs/runbook.md`](docs/runbook.md) for the full procedure and troubleshooting.
 
 ---
 
@@ -339,6 +365,8 @@ labels a project "delayed" or a promoter "bad".
 | [`docs/data-quality.md`](docs/data-quality.md) | Validation rules and severities |
 | [`docs/ingestion-report.md`](docs/ingestion-report.md) | Phase 1 baseline ingestion report |
 | [`docs/dashboard.md`](docs/dashboard.md) | Analytics dashboard (API + React frontend) |
+| [`docs/deploy.md`](docs/deploy.md) | Deployment: Vercel + Supabase + Render/Fly + GitHub Actions |
+| [`docs/runbook.md`](docs/runbook.md) | Operations: monthly refresh + scheduled task |
 
 ---
 

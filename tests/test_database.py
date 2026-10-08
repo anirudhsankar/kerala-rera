@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -14,8 +15,9 @@ from rera.database.models import (
     ProjectChangeEvent,
     ProjectSnapshot,
 )
+from rera.database.session import create_db_engine, init_db
 from rera.ingestion.collector import Collector
-from rera.services.ingestion_service import run_ingestion
+from rera.services.ingestion_service import latest_source_checksum, run_ingestion
 from rera.sources.krera import KReraExportFileSource
 
 
@@ -154,3 +156,24 @@ def test_questionable_record_is_stored_with_quality_issue(engine, tmp_path):
         project = conn.execute(select(Project)).one()
         assert project.district == "Atlantis"
         assert project.total_units == 1000
+
+
+def test_latest_checksum_and_prefetched_path(engine, sample_path, tmp_path):
+    first = _run(engine, sample_path, tmp_path)
+    assert first.records_inserted == 10
+    expected = hashlib.sha256(sample_path.read_bytes()).hexdigest()
+    assert latest_source_checksum(engine) == expected
+
+    # The `prefetched` path used by `rera update` ingests a pre-fetched source.
+    engine2 = create_db_engine(f"sqlite:///{(tmp_path / 'prefetch.db').as_posix()}")
+    init_db(engine2)
+    source = KReraExportFileSource(sample_path)
+    fetched = source.fetch_export()
+    report = run_ingestion(
+        source,
+        engine=engine2,
+        collector=Collector(raw_base_path=tmp_path),
+        prefetched=fetched,
+    )
+    assert report.records_inserted == 10
+    assert latest_source_checksum(engine2) == fetched.metadata.checksum_sha256

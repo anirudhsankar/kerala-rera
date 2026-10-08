@@ -33,10 +33,16 @@ from rera.services.ingestion_service import (
     export_projects,
     get_stats,
     get_status,
+    latest_source_checksum,
     run_ingestion,
 )
 from rera.services.inspection import inspect_source_file
-from rera.sources.krera import KReraExportFileSource, inspect_krera_live
+from rera.sources.base import ReraSource
+from rera.sources.krera import (
+    KReraDownloadSource,
+    KReraExportFileSource,
+    inspect_krera_live,
+)
 
 logger = get_logger("rera.cli")
 
@@ -299,6 +305,52 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_update(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    engine = _build_engine(args)
+    init_db(engine)
+
+    source: ReraSource
+    if settings.rera_export_url:
+        print(f"Downloading export from {settings.rera_export_url}")
+        source = KReraDownloadSource(settings.rera_export_url)
+    else:
+        source_file = _latest_manual_file(settings)
+        if source_file is None:
+            print(
+                "No RERA_EXPORT_URL configured and no export in "
+                f"'{settings.manual_import_path}'. Nothing to update.",
+                file=sys.stderr,
+            )
+            return 2
+        source = KReraExportFileSource(source_file)
+
+    try:
+        prefetched = source.fetch_export()
+    except Exception as exc:  # noqa: BLE001
+        print(f"Update failed while fetching source: {exc}", file=sys.stderr)
+        return 2
+
+    checksum = prefetched.metadata.checksum_sha256
+    if checksum and checksum == latest_source_checksum(engine):
+        print("No new data: source checksum matches the last run; skipping.")
+        print(f"  Records in source: {len(prefetched.records)}")
+        return 0
+
+    report = run_ingestion(source, engine=engine, prefetched=prefetched)
+    _print_report(report)
+    if report.status == RUN_STATUS_FAILED:
+        return 2
+
+    factory = create_session_factory(engine)
+    with factory() as session:
+        result = build_promoters(session)
+    print("PROMOTER CANONICALISATION")
+    for line in result.summary_lines()[1:]:
+        print(line)
+    return 0
+
+
 def cmd_promoters_build(args: argparse.Namespace) -> int:
     engine = _build_engine(args)
     init_db(engine)
@@ -381,6 +433,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve.add_argument("--port", type=int, default=8000)
     p_serve.add_argument("--reload", action="store_true")
     p_serve.set_defaults(func=cmd_serve)
+
+    p_update = sub.add_parser(
+        "update", help="Download (if configured) + ingest + rebuild promoters"
+    )
+    p_update.set_defaults(func=cmd_update)
 
     return parser
 
