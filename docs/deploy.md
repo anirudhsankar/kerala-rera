@@ -43,7 +43,44 @@ Nothing here is required for local development.
 
 ---
 
-## 2. API — Render (or Fly / Railway)
+## Option A — Single Vercel project (Services) — recommended
+
+Both the SPA and the FastAPI backend deploy as one Vercel project on one domain,
+using [Vercel Services](https://vercel.com/docs/services). Configured in the
+repo-root `vercel.json` and the root `index.py` entrypoint.
+
+- **`app`** service (`root: "."`, framework `fastapi`, entrypoint `index:app`) — public at `/api/*`.
+- **`frontend`** service (`root: "frontend"`, framework `vite`) — public at everything else;
+  its SPA fallback rewrite lives in its service config.
+
+Routing (`vercel.json` rewrites): `/api/(.*)` → `app`, then `/(.*)` → `frontend`.
+A service receives the **original path**, so the API's `/api/...` routes match
+unmodified; the SPA calls a **relative `/api`** (same origin), so no CORS and no
+`VITE_API_BASE` are needed in production.
+
+**Steps**
+1. Import the repo into Vercel (do **not** set a Root Directory — the project root is the repo).
+2. Add env vars (Project → Settings → Environment Variables):
+   - `DATABASE_URL` = Supabase **pooler** URL (`postgresql+psycopg://…?sslmode=require`)
+   - `READ_ONLY_DATABASE_URL` = pooler URL for `rera_readonly`
+   - `CORS_ORIGINS` = your deployment domain (same-origin calls don't need it, but harmless)
+   - leave `RERA_EXPORT_URL` unset
+3. Deploy. Build both services automatically.
+4. Test locally first with `vercel dev` (or `vercel dev -L` to skip cloud auth).
+
+**Caveats**
+- Backend runs as **serverless functions** (cold starts; use the Supabase pooler).
+  If prepared statements cause issues, append `?prepare_threshold=0` to the URL.
+- **Ingestion does not run here** — `rera update` stays on GitHub Actions / local.
+- Requires the `vercel.json` + `index.py` from this repo (already committed).
+
+---
+
+## Option B — API on Render/Fly + frontend on Vercel
+
+Use this if you prefer a long-running container for the API instead of serverless.
+
+### 2. API — Render (or Fly / Railway)
 
 A `Dockerfile` and `render.yaml` are included at the repo root.
 
@@ -59,7 +96,7 @@ Fly alternative: `fly launch` (Dockerfile detected), set the same env vars, `fly
 
 ---
 
-## 3. Frontend — Vercel
+### 3. Frontend — Vercel
 
 1. Import the repo into Vercel.
 2. **Root directory:** `frontend`

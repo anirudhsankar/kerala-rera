@@ -1,0 +1,25 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "app": {
+      "root": ".",
+      "framework": "fastapi",
+      "entrypoint": "index:app",
+      "installCommand": "pip install 'fastapi>=0.111' 'uvicorn>=0.30' 'SQLAlchemy>=2.0' 'psycopg[binary]>=3.1' 'pydantic>=2.6' 'pydantic-settings>=2.2' 'python-dotenv>=1.0'",
+      "functions": {
+        "index.py": {
+          "excludeFiles": "{frontend/**,tests/**,docs/**,data/**,migrations/**,scripts/**,.github/**}"
+        }
+      }
+    },
+    "frontend": {
+      "root": "frontend",
+      "framework": "vite",
+      "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": { "service": "app" } },
+    { "source": "/(.*)", "destination": { "service": "frontend" } }
+  ]
+}
