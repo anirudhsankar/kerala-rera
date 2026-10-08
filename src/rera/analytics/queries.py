@@ -11,7 +11,7 @@ reports factual counts (e.g. "declared completion date has passed").
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy import case, extract, func, or_, select
@@ -361,9 +361,13 @@ def search_projects(
     *,
     q: str | None = None,
     district: str | None = None,
+    taluk: str | None = None,
+    village: str | None = None,
     project_type: str | None = None,
     project_status: str | None = None,
     promoter_id: int | None = None,
+    registered_after: date | None = None,
+    sort: str = "name",
     limit: int = 50,
     offset: int = 0,
 ) -> dict[str, Any]:
@@ -379,22 +383,33 @@ def search_projects(
         )
     if district:
         filters.append(Project.district == district)
+    if taluk:
+        filters.append(Project.taluk == taluk)
+    if village:
+        filters.append(Project.village == village)
     if project_type:
         filters.append(Project.project_type == project_type)
     if project_status:
         filters.append(Project.project_status == project_status)
     if promoter_id:
         filters.append(Project.promoter_id == promoter_id)
+    if registered_after:
+        filters.append(Project.certificate_date >= registered_after)
 
     total = session.execute(
         select(func.count()).select_from(Project).where(*filters)
     ).scalar_one()
 
+    if sort == "newest":
+        order_by: list[Any] = [Project.certificate_date.desc().nullslast(), Project.project_name]
+    else:
+        order_by = [Project.district, Project.project_name]
+
     items = (
         session.execute(
             select(Project)
             .where(*filters)
-            .order_by(Project.district, Project.project_name)
+            .order_by(*order_by)
             .limit(limit)
             .offset(offset)
         )
@@ -544,7 +559,9 @@ def baseline(session: Session) -> dict[str, Any] | None:
     }
 
 
-def filter_options(session: Session) -> dict[str, Any]:
+def filter_options(
+    session: Session, district: str | None = None, taluk: str | None = None
+) -> dict[str, Any]:
     districts = [
         d for (d,) in session.execute(
             select(Project.district).distinct().order_by(Project.district)
@@ -563,4 +580,249 @@ def filter_options(session: Session) -> dict[str, Any]:
         ).all()
         if s
     ]
-    return {"districts": districts, "types": types, "statuses": statuses}
+    taluks: list[str] = []
+    if district:
+        taluks = [
+            t for (t,) in session.execute(
+                select(Project.taluk)
+                .where(Project.district == district, Project.taluk.is_not(None))
+                .distinct()
+                .order_by(Project.taluk)
+            ).all()
+            if t
+        ]
+    villages: list[str] = []
+    if district and taluk:
+        villages = [
+            v for (v,) in session.execute(
+                select(Project.village)
+                .where(
+                    Project.district == district,
+                    Project.taluk == taluk,
+                    Project.village.is_not(None),
+                )
+                .distinct()
+                .order_by(Project.village)
+            ).all()
+            if v
+        ]
+    return {
+        "districts": districts,
+        "types": types,
+        "statuses": statuses,
+        "taluks": taluks,
+        "villages": villages,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Locations (taluk / village discovery)
+# ---------------------------------------------------------------------------
+def by_taluk(session: Session, district: str | None = None) -> list[dict[str, Any]]:
+    filters: list[Any] = [Project.taluk.is_not(None)]
+    if district:
+        filters.append(Project.district == district)
+    rows = session.execute(
+        select(
+            Project.district,
+            Project.taluk,
+            func.count(),
+            func.coalesce(func.sum(Project.total_units), 0),
+            func.coalesce(func.sum(Project.sold_units), 0),
+        )
+        .where(*filters)
+        .group_by(Project.district, Project.taluk)
+        .order_by(func.count().desc())
+    ).all()
+    result = []
+    for d, t, projects, total_units, sold_units in rows:
+        total_units = _int(total_units)
+        sold_units = _int(sold_units)
+        result.append(
+            {
+                "district": d,
+                "taluk": t,
+                "projects": projects,
+                "total_units": total_units,
+                "sold_units": sold_units,
+                "sell_through": _sell_through(sold_units, total_units),
+            }
+        )
+    return result
+
+
+def taluks_for_district(session: Session, district: str) -> list[dict[str, Any]]:
+    rows = session.execute(
+        select(Project.taluk, func.count())
+        .where(Project.district == district, Project.taluk.is_not(None))
+        .group_by(Project.taluk)
+        .order_by(func.count().desc())
+    ).all()
+    return [{"taluk": t, "projects": c} for t, c in rows]
+
+
+def villages_for(
+    session: Session, district: str | None = None, taluk: str | None = None
+) -> list[dict[str, Any]]:
+    filters: list[Any] = [Project.village.is_not(None)]
+    if district:
+        filters.append(Project.district == district)
+    if taluk:
+        filters.append(Project.taluk == taluk)
+    rows = session.execute(
+        select(Project.village, func.count())
+        .where(*filters)
+        .group_by(Project.village)
+        .order_by(func.count().desc(), Project.village)
+    ).all()
+    return [{"village": v, "projects": c} for v, c in rows]
+
+
+def _locality_projects(
+    session: Session,
+    *,
+    district: str,
+    taluk: str | None = None,
+    village: str | None = None,
+) -> list[Project]:
+    filters: list[Any] = [Project.district == district]
+    if taluk:
+        filters.append(Project.taluk == taluk)
+    if village:
+        filters.append(Project.village == village)
+    return list(session.execute(select(Project).where(*filters)).scalars().all())
+
+
+def _locality_summary(projects: list[Project]) -> dict[str, Any]:
+    total_units = sum(p.total_units or 0 for p in projects)
+    sold_units = sum(p.sold_units or 0 for p in projects)
+    completed = sum(1 for p in projects if p.project_status == "Completed")
+    return {
+        "projects": len(projects),
+        "total_units": total_units,
+        "sold_units": sold_units,
+        "sell_through": _sell_through(sold_units, total_units),
+        "completed": completed,
+        "inprogress": len(projects) - completed,
+    }
+
+
+def _top_builders(session: Session, projects: list[Project], limit: int = 10) -> list[dict[str, Any]]:
+    counts: dict[int | None, int] = {}
+    for p in projects:
+        counts[p.promoter_id] = counts.get(p.promoter_id, 0) + 1
+    ids = [pid for pid in counts if pid is not None]
+    names = {}
+    if ids:
+        names = dict(
+            session.execute(
+                select(Promoter.id, Promoter.canonical_name).where(Promoter.id.in_(ids))
+            ).all()
+        )
+    builders: list[dict[str, Any]] = [
+        {
+            "promoter_id": pid,
+            "name": names.get(pid, "Unknown") if pid is not None else "Unknown",
+            "projects": count,
+        }
+        for pid, count in counts.items()
+    ]
+    builders.sort(key=lambda item: int(item["projects"]), reverse=True)
+    return builders[:limit]
+
+
+def _recent(projects: list[Project], limit: int) -> list[dict[str, Any]]:
+    ordered = sorted(
+        projects,
+        key=lambda p: (p.certificate_date is None, -(p.certificate_date.toordinal() if p.certificate_date else 0)),
+    )
+    return [_project_brief(p) for p in ordered[:limit]]
+
+
+def taluk_detail(session: Session, district: str, taluk: str) -> dict[str, Any] | None:
+    projects = _locality_projects(session, district=district, taluk=taluk)
+    if not projects:
+        return None
+    villages: dict[str, int] = {}
+    types: dict[str, int] = {}
+    for p in projects:
+        villages[p.village or "Unknown"] = villages.get(p.village or "Unknown", 0) + 1
+        types[p.project_type or "Unknown"] = types.get(p.project_type or "Unknown", 0) + 1
+    return {
+        "district": district,
+        "taluk": taluk,
+        "summary": _locality_summary(projects),
+        "villages": [
+            {"village": v, "projects": c}
+            for v, c in sorted(villages.items(), key=lambda kv: -kv[1])
+        ],
+        "by_type": [
+            {"type": t, "count": c}
+            for t, c in sorted(types.items(), key=lambda kv: -kv[1])
+        ],
+        "top_builders": _top_builders(session, projects),
+        "recent": _recent(projects, 10),
+    }
+
+
+def village_detail(
+    session: Session, district: str, village: str, taluk: str | None = None
+) -> dict[str, Any] | None:
+    projects = _locality_projects(session, district=district, taluk=taluk, village=village)
+    if not projects:
+        return None
+    types: dict[str, int] = {}
+    for p in projects:
+        types[p.project_type or "Unknown"] = types.get(p.project_type or "Unknown", 0) + 1
+    taluks = sorted({p.taluk for p in projects if p.taluk})
+    return {
+        "district": district,
+        "village": village,
+        "taluks": taluks,
+        "summary": _locality_summary(projects),
+        "by_type": [
+            {"type": t, "count": c}
+            for t, c in sorted(types.items(), key=lambda kv: -kv[1])
+        ],
+        "top_builders": _top_builders(session, projects),
+        "recent": _recent(projects, 10),
+    }
+
+
+def recent_projects(
+    session: Session,
+    *,
+    district: str | None = None,
+    taluk: str | None = None,
+    village: str | None = None,
+    months: int = 12,
+    limit: int = 24,
+) -> dict[str, Any]:
+    cutoff = date.today() - timedelta(days=30 * months)
+    filters: list[Any] = [Project.certificate_date.is_not(None), Project.certificate_date >= cutoff]
+    if district:
+        filters.append(Project.district == district)
+    if taluk:
+        filters.append(Project.taluk == taluk)
+    if village:
+        filters.append(Project.village == village)
+    total = session.execute(
+        select(func.count()).select_from(Project).where(*filters)
+    ).scalar_one()
+    items = (
+        session.execute(
+            select(Project)
+            .where(*filters)
+            .order_by(Project.certificate_date.desc())
+            .limit(limit)
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "months": months,
+        "since": cutoff.isoformat(),
+        "total": total,
+        "items": [_project_brief(p) for p in items],
+    }
+

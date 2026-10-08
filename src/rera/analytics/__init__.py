@@ -14,6 +14,7 @@ from rera.analytics.queries import (
     builder_detail,
     by_builder,
     by_district,
+    by_taluk,
     data_quality_summary,
     district_detail,
     filter_options,
@@ -21,9 +22,14 @@ from rera.analytics.queries import (
     overview,
     project_changes,
     project_history,
+    recent_projects,
     runs,
     search_projects,
+    taluk_detail,
+    taluks_for_district,
     timeline,
+    village_detail,
+    villages_for,
 )
 
 __all__ = [
@@ -34,6 +40,7 @@ __all__ = [
     "builder_detail",
     "by_builder",
     "by_district",
+    "by_taluk",
     "data_quality_summary",
     "district_detail",
     "filter_options",
@@ -41,7 +48,12 @@ __all__ = [
     "overview",
     "project_changes",
     "project_history",
+    "recent_projects",
     "runs",
     "search_projects",
+    "taluk_detail",
+    "taluks_for_district",
     "timeline",
+    "village_detail",
+    "villages_for",
 ]

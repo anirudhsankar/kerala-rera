@@ -22,6 +22,8 @@ def _seed(session):
                 rera_registration_number="R1",
                 project_name="Alpha",
                 district="Ernakulam",
+                taluk="Kanayannur",
+                village="KAKKANAD",
                 project_type="Residential (Apartment)",
                 project_status="Completed",
                 certificate_date=date(2021, 5, 1),
@@ -34,6 +36,8 @@ def _seed(session):
                 rera_registration_number="R2",
                 project_name="Beta",
                 district="Kollam",
+                taluk="Kollam",
+                village="SASTHAMANGALAM",
                 project_type="Plots",
                 project_status="Inprogress",
                 total_units=None,
@@ -104,3 +108,33 @@ def test_filters_and_baseline(client):
     filters = client.get("/api/filters").json()
     assert "Ernakulam" in filters["districts"]
     assert client.get("/api/baseline").json() is None
+
+
+def test_locations_cascading_and_new(client):
+    taluks = client.get("/api/locations/taluks", params={"district": "Ernakulam"}).json()
+    assert taluks[0]["taluk"] == "Kanayannur"
+    villages = client.get(
+        "/api/locations/villages", params={"district": "Ernakulam", "taluk": "Kanayannur"}
+    ).json()
+    assert villages[0]["village"] == "KAKKANAD"
+    by_taluk = client.get("/api/locations/by-taluk", params={"district": "Ernakulam"}).json()
+    assert by_taluk[0]["taluk"] == "Kanayannur"
+    detail = client.get(
+        "/api/locations/taluk", params={"district": "Ernakulam", "taluk": "Kanayannur"}
+    ).json()
+    assert detail["summary"]["projects"] == 1
+
+
+def test_project_taluk_filter_and_new(client):
+    assert client.get("/api/projects", params={"taluk": "Kanayannur"}).json()["total"] == 1
+    new = client.get("/api/projects/new", params={"months": 120}).json()
+    assert new["total"] >= 1
+
+
+def test_filters_cascade(client):
+    body = client.get("/api/filters", params={"district": "Ernakulam"}).json()
+    assert "Kanayannur" in body["taluks"]
+    body2 = client.get(
+        "/api/filters", params={"district": "Ernakulam", "taluk": "Kanayannur"}
+    ).json()
+    assert "KAKKANAD" in body2["villages"]

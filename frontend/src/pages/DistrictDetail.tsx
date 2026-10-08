@@ -57,7 +57,7 @@ export default function DistrictDetailPage() {
           />
         </Card>
 
-        <Card title="Taluks">
+        <Card title="Taluks" subtitle="Tap a taluk to find its projects">
           <EChart
             height={320}
             option={{
@@ -77,6 +77,18 @@ export default function DistrictDetailPage() {
               ],
             }}
           />
+          <div className="pills" style={{ marginTop: 14 }}>
+            {data.taluks.map((t) => (
+              <Link
+                className="pill"
+                key={t.taluk}
+                to={`/find?district=${encodeURIComponent(data.district)}&taluk=${encodeURIComponent(t.taluk)}`}
+              >
+                <span className="dot" />
+                {t.taluk} · {t.count}
+              </Link>
+            ))}
+          </div>
         </Card>
       </div>
 

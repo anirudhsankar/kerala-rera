@@ -6,6 +6,7 @@ never returns interpretive judgements such as "delayed" or "bad promoter".
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -94,9 +95,13 @@ def projects(
     session: SessionDep,
     q: str | None = None,
     district: str | None = None,
+    taluk: str | None = None,
+    village: str | None = None,
     project_type: str | None = None,
     project_status: str | None = None,
     promoter_id: int | None = None,
+    registered_after: date | None = None,
+    sort: Annotated[str, Query(pattern="^(name|newest)$")] = "name",
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> dict:
@@ -104,12 +109,70 @@ def projects(
         session,
         q=q,
         district=district,
+        taluk=taluk,
+        village=village,
         project_type=project_type,
         project_status=project_status,
         promoter_id=promoter_id,
+        registered_after=registered_after,
+        sort=sort,
         limit=limit,
         offset=offset,
     )
+
+
+@app.get("/api/projects/new", tags=["projects"])
+def projects_new(
+    session: SessionDep,
+    district: str | None = None,
+    taluk: str | None = None,
+    village: str | None = None,
+    months: Annotated[int, Query(ge=1, le=120)] = 12,
+    limit: Annotated[int, Query(ge=1, le=500)] = 24,
+) -> dict:
+    return queries.recent_projects(
+        session, district=district, taluk=taluk, village=village, months=months, limit=limit
+    )
+
+
+@app.get("/api/locations/taluks", tags=["locations"])
+def location_taluks(district: str, session: SessionDep) -> list[dict]:
+    return queries.taluks_for_district(session, district)
+
+
+@app.get("/api/locations/villages", tags=["locations"])
+def location_villages(
+    session: SessionDep,
+    district: str | None = None,
+    taluk: str | None = None,
+) -> list[dict]:
+    return queries.villages_for(session, district=district, taluk=taluk)
+
+
+@app.get("/api/locations/by-taluk", tags=["locations"])
+def location_by_taluk(session: SessionDep, district: str | None = None) -> list[dict]:
+    return queries.by_taluk(session, district=district)
+
+
+@app.get("/api/locations/taluk", tags=["locations"])
+def location_taluk(district: str, taluk: str, session: SessionDep) -> dict:
+    data = queries.taluk_detail(session, district, taluk)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Taluk not found")
+    return data
+
+
+@app.get("/api/locations/village", tags=["locations"])
+def location_village(
+    district: str,
+    village: str,
+    session: SessionDep,
+    taluk: str | None = None,
+) -> dict:
+    data = queries.village_detail(session, district, village, taluk=taluk)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Village not found")
+    return data
 
 
 @app.get("/api/project", tags=["projects"])
@@ -131,8 +194,12 @@ def project_changes(registration_number: str, session: SessionDep) -> list[dict]
 
 
 @app.get("/api/filters", tags=["meta"])
-def filters(session: SessionDep) -> dict:
-    return queries.filter_options(session)
+def filters(
+    session: SessionDep,
+    district: str | None = None,
+    taluk: str | None = None,
+) -> dict:
+    return queries.filter_options(session, district=district, taluk=taluk)
 
 
 @app.get("/api/runs", tags=["meta"])

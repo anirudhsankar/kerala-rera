@@ -67,6 +67,7 @@ npm run build      # production build into frontend/dist
 | Page | Contents |
 |------|----------|
 | **Overview** | KPIs (projects, units, sold, sell-through, units under development, completion passed); registrations over time; completion pipeline; status and type mix |
+| **Find projects** | District → Taluk → Village drill-down; "registered in the last N months" window; newest-first results; best-effort taluk choropleth |
 | **Districts** | Kerala choropleth; projects / sell-through by district; full district table; drill-down per district (type, taluks, top builders) |
 | **Builders** | Top-15 chart; sortable leaderboard; concentration (top-10 share); builder detail with district footprint, type mix and projects |
 | **Projects** | Search + filters (district/type/status) with pagination; project detail with promoter link, immutable snapshot history and change events |
@@ -99,6 +100,14 @@ npm run build      # production build into frontend/dist
 
 ---
 
+## Interface
+
+* Responsive, public-facing layout with a sticky top bar and a global **search**
+  that jumps straight to the Projects explorer.
+* **Light/dark theme** toggle (remembered in the browser; charts re-theme too).
+* Charts share an ECharts theme with soft gradients and rounded bars; KPI tiles
+  and discovery panels (top districts / top builders) link into the detail pages.
+
 ## Analytical conventions
 
 * **Derived metrics are labelled.** `overview.derived_metrics` lists them
@@ -124,6 +133,32 @@ names were mapped to canonical Kerala district names
 > Verify the upstream licence before any redistribution. For a portfolio/
 > non-commercial use this attribution is provided; make your own licence
 > assessment before publishing.
+
+### Taluk boundaries (best-effort)
+
+`frontend/public/kerala_taluks.geojson` was derived from **GADM 4.1 ADM3**,
+with a curated alias map from colonial-era GADM names to our source taluk names
+(e.g. `Trivandrum` → `Thiruvananathapuram`, `Quilon` → `Kollam`, `Cochin` →
+`Kochi`). Only **41** features map to taluks present in the dataset; unmatched
+features are rendered **neutral (never guessed)**. Several taluks in the data
+are post-1990 and have **no polygon** in GADM (e.g. Kanayannur, Attappadi
+Tribal, Kondotty, Manjeshwaram, Ernad). **Villages are lists only** — no open
+village-boundary dataset was available. GADM data is **non-commercial with
+attribution**.
+
+## Location API
+
+```
+GET /api/locations/taluks?district=
+GET /api/locations/villages?district=&taluk=
+GET /api/locations/by-taluk?district=
+GET /api/locations/taluk?district=&taluk=
+GET /api/locations/village?district=&taluk=&village=
+GET /api/projects/new?district=&taluk=&village=&months=&limit=
+```
+
+`/api/projects` and `/api/filters` also accept `taluk`/`village` for cascading
+filters and filtering.
 
 ---
 

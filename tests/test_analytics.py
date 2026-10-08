@@ -25,6 +25,8 @@ def _seed(session):
         "R1",
         project_name="Alpha",
         district="Ernakulam",
+        taluk="Kanayannur",
+        village="KAKKANAD",
         project_type="Residential (Apartment)",
         project_status="Completed",
         project_start_date=date(2020, 1, 1),
@@ -39,6 +41,8 @@ def _seed(session):
         "R2",
         project_name="Beta",
         district="Ernakulam",
+        taluk="Kanayannur",
+        village="EDAPPALLY",
         project_type="Plots",
         project_status="Inprogress",
         project_start_date=date(2022, 1, 1),
@@ -53,6 +57,8 @@ def _seed(session):
         "R3",
         project_name="Gamma",
         district="Kollam",
+        taluk="Kollam",
+        village="SASTHAMANGALAM",
         project_type="Plots",
         project_status="Inprogress",
         project_start_date=date(2021, 1, 1),
@@ -141,3 +147,36 @@ def test_canonical_key_normalisation():
     assert canonical_key("  Sobha   Limited ") == "SOBHA LIMITED"
     assert canonical_key("Sobha-Limited") == "SOBHA LIMITED"
     assert canonical_key("A.B.C. Builders") == "A B C BUILDERS"
+
+def test_location_filters_and_newest_sort(session):
+    _seed(session)
+    assert queries.search_projects(session, taluk="Kanayannur")["total"] == 2
+    assert queries.search_projects(session, village="KAKKANAD")["total"] == 1
+    newest = queries.search_projects(session, sort="newest")
+    assert newest["items"][0]["rera_registration_number"] == "R3"  # registered 2022
+
+
+def test_by_taluk_and_taluk_detail(session):
+    _seed(session)
+    taluks = {t["taluk"]: t for t in queries.by_taluk(session, district="Ernakulam")}
+    assert taluks["Kanayannur"]["projects"] == 2
+    assert taluks["Kanayannur"]["total_units"] == 150
+    detail = queries.taluk_detail(session, "Ernakulam", "Kanayannur")
+    assert detail is not None
+    assert detail["summary"]["projects"] == 2
+    assert {v["village"] for v in detail["villages"]} == {"KAKKANAD", "EDAPPALLY"}
+
+
+def test_taluks_and_villages_for(session):
+    _seed(session)
+    taluks = queries.taluks_for_district(session, "Ernakulam")
+    assert taluks[0]["taluk"] == "Kanayannur" and taluks[0]["projects"] == 2
+    villages = queries.villages_for(session, district="Ernakulam", taluk="Kanayannur")
+    assert {v["village"] for v in villages} == {"KAKKANAD", "EDAPPALLY"}
+
+
+def test_recent_projects(session):
+    _seed(session)
+    recent = queries.recent_projects(session, months=120)
+    assert recent["total"] == 3
+    assert recent["items"][0]["rera_registration_number"] == "R3"

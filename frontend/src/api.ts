@@ -24,6 +24,7 @@ export async function api<T>(
 export function useApi<T>(
   path: string,
   params?: Record<string, unknown>,
+  enabled = true,
 ): { data: T | null; error: string | null; loading: boolean } {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +32,12 @@ export function useApi<T>(
   const key = JSON.stringify(params ?? {});
 
   useEffect(() => {
+    if (!enabled) {
+      setData(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     let active = true;
     setLoading(true);
     api<T>(path, params)
@@ -50,7 +57,7 @@ export function useApi<T>(
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, key]);
+  }, [path, key, enabled]);
 
   return { data, error, loading };
 }
@@ -230,4 +237,63 @@ export interface FilterOptions {
   districts: string[];
   types: string[];
   statuses: string[];
+  taluks?: string[];
+  villages?: string[];
+}
+
+// ---- locations ------------------------------------------------------------
+export interface TalukStat {
+  district?: string;
+  taluk: string;
+  projects: number;
+  total_units?: number;
+  sold_units?: number;
+  sell_through?: number | null;
+}
+
+export interface VillageStat {
+  village: string;
+  projects: number;
+}
+
+export interface LocalitySummary {
+  projects: number;
+  total_units: number;
+  sold_units: number;
+  sell_through: number | null;
+  completed: number;
+  inprogress: number;
+}
+
+export interface BuilderRef {
+  promoter_id: number | null;
+  name: string;
+  projects: number;
+}
+
+export interface TalukDetail {
+  district: string;
+  taluk: string;
+  summary: LocalitySummary;
+  villages: VillageStat[];
+  by_type: TypeCount[];
+  top_builders: BuilderRef[];
+  recent: ProjectBrief[];
+}
+
+export interface VillageDetail {
+  district: string;
+  village: string;
+  taluks: string[];
+  summary: LocalitySummary;
+  by_type: TypeCount[];
+  top_builders: BuilderRef[];
+  recent: ProjectBrief[];
+}
+
+export interface NewProjects {
+  months: number;
+  since: string;
+  total: number;
+  items: ProjectBrief[];
 }
