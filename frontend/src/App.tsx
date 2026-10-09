@@ -16,10 +16,9 @@ import { useTheme } from "./theme";
 function BrandMark() {
   return (
     <span className="brand-mark">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 10.5 12 3l9 7.5" />
         <path d="M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5" />
-        <path d="M10 21v-5h4v5" />
       </svg>
     </span>
   );

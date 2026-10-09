@@ -118,40 +118,56 @@ export function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
   return null;
 }
 
-export function Hero({
+export function PageHeader({
   eyebrow,
   title,
   subtitle,
-  stats,
-  actions,
+  right,
 }: {
   eyebrow?: string;
   title: string;
-  subtitle: string;
-  stats: { label: string; value: ReactNode }[];
-  actions?: ReactNode;
+  subtitle?: string;
+  right?: ReactNode;
 }) {
   return (
-    <section className="hero">
-      <div className="hero-inner">
-        {eyebrow && (
-          <p className="eyebrow" style={{ color: "rgba(255,255,255,.88)" }}>
-            {eyebrow}
-          </p>
-        )}
-        <h1>{title}</h1>
-        <p className="lede">{subtitle}</p>
-        <div className="hero-stats">
-          {stats.map((s) => (
-            <div className="hero-stat" key={s.label}>
-              <b>{s.value}</b>
-              <span>{s.label}</span>
-            </div>
-          ))}
-        </div>
-        {actions && <div className="hero-cta">{actions}</div>}
+    <div className="page-head">
+      <div>
+        {eyebrow && <p className="eyebrow">{eyebrow}</p>}
+        <h2>{title}</h2>
+        {subtitle && <p className="page-sub">{subtitle}</p>}
       </div>
-    </section>
+      {right}
+    </div>
+  );
+}
+
+export function Segmented<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label?: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="segmented">
+      {label && <span className="segmented-label">{label}</span>}
+      <div className="segmented-group">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            className={option.value === value ? "active" : ""}
+            onClick={() => onChange(option.value)}
+            type="button"
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -169,17 +185,17 @@ export function Kpi({
   tone?: "brand" | "ocean" | "saffron" | "plum" | "slate";
 }) {
   return (
-    <div className={`kpi tone-${tone}`}>
-      {icon && (
-        <div className={`kpi-icon ${tone === "brand" ? "" : tone}`}>
-          <Icon name={icon} />
-        </div>
-      )}
-      <div className="kpi-body">
-        <div className="kpi-label">{label}</div>
-        <div className="kpi-value">{value}</div>
-        {hint && <div className="kpi-hint">{hint}</div>}
+    <div className={`kpi ${tone === "brand" ? "" : tone}`}>
+      <div className="kpi-label">
+        {icon && (
+          <span style={{ color: "var(--muted-2)", display: "inline-flex" }}>
+            <Icon name={icon} size={13} />
+          </span>
+        )}
+        {label}
       </div>
+      <div className="kpi-value">{value}</div>
+      {hint && <div className="kpi-hint">{hint}</div>}
     </div>
   );
 }
@@ -202,7 +218,7 @@ export function Pill({
 export function Skeleton({
   height = 14,
   width = "100%",
-  radius = 10,
+  radius = 8,
 }: {
   height?: number;
   width?: number | string;
