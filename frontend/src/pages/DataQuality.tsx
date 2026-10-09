@@ -35,6 +35,19 @@ export default function DataQualityPage() {
         </div>
       </div>
 
+      <Card title='Builder identity and the "review" tag'>
+        <p style={{ margin: 0, lineHeight: 1.75, fontSize: 13.5 }}>
+          Some builders show a small <span className="badge review">review</span>{" "}
+          label. It means the official K-RERA records spelled that builder’s name
+          in more than one way (for example, “Sobha Limited” and “SOBHA
+          LIMITED”). We group those spellings under a single builder, but keep
+          the <strong>review</strong> tag until a person confirms they are the
+          same company. We never merge two differently-named builders
+          automatically, and the original spelling is always preserved on each
+          project.
+        </p>
+      </Card>
+
       <div className="kpis">
         <Kpi icon="layers" tone="brand" label="Quality checks" value={fmtInt(d.total)} />
         <Kpi icon="clock" tone="slate" label="Errors" value={fmtInt(severity.ERROR ?? 0)} />
