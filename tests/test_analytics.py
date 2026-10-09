@@ -210,3 +210,49 @@ def test_history_queries(session):
     assert summary["projects_changed"] == 1
     assert any(f["field_name"] == "project_status" for f in summary["changes_by_field"])
     assert summary["status_transitions"][0]["count"] == 1
+
+
+def test_overdue_queries(session):
+    _seed(session)
+    rows = queries.overdue_projects(session)
+    assert rows["total"] == 1  # R3 (Inprogress, completion 2000); R1 Completed, R2 future
+    assert rows["items"][0]["rera_registration_number"] == "R3"
+    assert rows["items"][0]["days_past_completion"] > 0
+    summary = queries.overdue_summary(session)
+    assert summary["total"] == 1
+    assert summary["by_district"][0]["district"] == "Kollam"
+
+
+def test_unsold_inventory(session):
+    _seed(session)
+    inv = queries.unsold_inventory(session)
+    assert inv["total_units"] == 150
+    assert inv["sold_units"] == 100
+    assert inv["unsold_units"] == 50
+    assert inv["undisclosed_projects"] == 1
+
+
+def test_supply_pipeline_and_registration_trend(session):
+    _seed(session)
+    pipe = {p["year"]: p for p in queries.supply_pipeline(session)}
+    assert pipe[2030]["units"] == 50 and pipe[2030]["projects"] == 1
+    assert 2000 in pipe and pipe[2000]["units"] == 0
+
+    t = queries.registration_trend(session, "month")
+    assert t["periods"] == ["2021-05", "2021-06", "2022-01"]
+    assert t["series"][0]["data"] == [1, 1, 1]
+    tq = queries.registration_trend(session, "quarter", by_type=True)
+    assert "2021-Q2" in tq["periods"]
+
+
+def test_builder_concentration_and_detail(session):
+    _seed(session)
+    c = queries.builder_concentration(session)
+    assert c["total_units"] == 150
+    assert c["top10_share"] == 1.0
+
+    acme = next(b for b in queries.by_builder(session) if b["name"] == "Acme Builders")
+    detail = queries.builder_detail(session, acme["promoter_id"])
+    assert detail["summary"]["completed"] == 1
+    assert detail["summary"]["inprogress"] == 1
+    assert detail["summary"]["past_due_count"] == 0

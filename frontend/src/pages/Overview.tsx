@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { EChart } from "../components/EChart";
 import {
   Card,
@@ -33,6 +33,8 @@ export default function OverviewPage() {
   const recent = useApi<NewProjects>("/projects/new", { months: 12, limit: 6 });
   const baseline = useApi<BaselineInfo | null>("/baseline");
   const [trend, setTrend] = useState<Trend>("registrations");
+  const [query, setQuery] = useState("");
+  const navigate = useNavigate();
 
   if (ov.loading || tl.loading) return <Loader label="Loading the Kerala picture…" />;
   if (ov.error) return <ErrorBox message={ov.error} />;
@@ -76,6 +78,26 @@ export default function OverviewPage() {
           />
         }
       />
+
+      <Card>
+        <form
+          className="toolbar"
+          style={{ marginBottom: 0 }}
+          role="search"
+          onSubmit={(e) => {
+            e.preventDefault();
+            navigate(query.trim() ? `/projects?q=${encodeURIComponent(query.trim())}` : "/projects");
+          }}
+        >
+          <input
+            placeholder="Check my project — search by project name, RERA certificate number or promoter…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            style={{ flex: 1 }}
+          />
+          <button type="submit">Search</button>
+        </form>
+      </Card>
 
       {statusPills.length > 0 && (
         <div className="pills" style={{ marginBottom: 20 }}>

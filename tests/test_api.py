@@ -41,6 +41,8 @@ def _seed(session):
                 village="SASTHAMANGALAM",
                 project_type="Plots",
                 project_status="Inprogress",
+                certificate_date=date(2022, 1, 1),
+                declared_completion_date=date(2000, 1, 1),
                 total_units=None,
                 sold_units=5,
             ),
@@ -162,3 +164,32 @@ def test_changes_and_history(client):
     summary = client.get("/api/history/summary").json()
     assert summary["total_changes"] >= 1
     assert summary["projects_changed"] >= 1
+
+
+def test_overdue_endpoints(client):
+    body = client.get("/api/overdue").json()
+    assert body["total"] == 1
+    assert body["items"][0]["rera_registration_number"] == "R2"
+    assert body["items"][0]["days_past_completion"] > 0
+    summary = client.get("/api/overdue/summary").json()
+    assert summary["total"] == 1
+    assert summary["by_district"][0]["district"] == "Kollam"
+
+
+def test_market_endpoints(client):
+    unsold = client.get("/api/market/unsold").json()
+    assert unsold["total_units"] == 100
+    assert unsold["undisclosed_projects"] == 1
+    assert client.get("/api/market/pipeline").status_code == 200
+    reg = client.get("/api/market/registrations", params={"granularity": "month"}).json()
+    assert "periods" in reg and reg["periods"]
+    assert client.get("/api/market/mix").status_code == 200
+    concentration = client.get("/api/market/concentration").json()
+    assert concentration["total_units"] == 100
+
+
+def test_builder_detail_completion_counts(client):
+    builders = client.get("/api/builders").json()
+    detail = client.get(f"/api/builders/{builders[0]['promoter_id']}").json()
+    assert "completed" in detail["summary"]
+    assert "past_due_count" in detail["summary"]

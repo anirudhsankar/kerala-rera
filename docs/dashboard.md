@@ -71,6 +71,8 @@ npm run build      # production build into frontend/dist
 | **Districts** | Kerala choropleth; projects / sell-through by district; full district table; drill-down per district (type, taluks, top builders) |
 | **Builders** | Top-15 chart; sortable leaderboard; concentration (top-10 share); builder detail with district footprint, type mix and projects |
 | **Projects** | Search + filters (district/type/status) with pagination; project detail with promoter link, immutable snapshot history and change events |
+| **Overdue** | Projects past their declared completion (not Completed), filterable by 30/90/180 days; by district and by promoter |
+| **Market** | Demand heatmap (district/taluk by projects / share sold / units); unsold inventory; supply pipeline; registration trend (month/quarter × type); project mix; builder concentration |
 | **History** | Cross-project change feed + trends (changes/month, by field, status transitions); project-level snapshot timeline |
 | **Data & provenance** | Data-quality findings, ingestion runs, baseline, source caveats |
 
@@ -173,6 +175,24 @@ GET /api/project/changes?registration_number=...
 History is append-only: `project_snapshots` and `project_change_events` are never
 modified or deleted. Charts populate as new exports are ingested; a single
 baseline yields one snapshot per project.
+
+## Overdue & market API
+
+```
+GET /api/overdue?district=&promoter_id=&min_days=&limit=&offset=
+GET /api/overdue/summary?min_days=
+GET /api/market/unsold
+GET /api/market/pipeline
+GET /api/market/registrations?granularity=month|quarter|year&by_type=
+GET /api/market/mix
+GET /api/market/concentration
+```
+
+**Note on wording:** "overdue" / "past declared completion" compare today's date
+with the completion date a promoter declared. This is a **factual date
+comparison**, not a regulatory finding that a project is delayed. Units with no
+reported total are shown as **"Not disclosed"** and excluded from sold-%
+denominators; projects with `Sold > Total` are flagged as likely data errors.
 
 ---
 

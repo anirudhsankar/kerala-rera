@@ -146,6 +146,10 @@ export interface BuilderDetail {
     total_units: number;
     sold_units: number;
     sell_through: number | null;
+    completed: number;
+    inprogress: number;
+    past_due_count: number;
+    avg_days_past_completion: number | null;
   };
   by_district: { district: string; count: number }[];
   by_type: TypeCount[];
@@ -331,4 +335,83 @@ export interface HistorySummary {
   snapshots_by_month: PeriodCount[];
   baseline_at: string | null;
   note: string;
+}
+
+// ---- overdue / market -----------------------------------------------------
+export interface OverdueItem extends ProjectBrief {
+  days_past_completion: number;
+}
+
+export interface OverduePage {
+  total: number;
+  limit: number;
+  offset: number;
+  min_days: number;
+  as_of: string;
+  items: OverdueItem[];
+}
+
+export interface OverdueDistrict {
+  district: string;
+  count: number;
+  avg_days: number;
+}
+export interface OverduePromoter {
+  promoter_id: number;
+  name: string;
+  count: number;
+  avg_days: number;
+}
+export interface OverdueSummary {
+  total: number;
+  avg_days_past_completion: number | null;
+  min_days: number;
+  as_of: string;
+  by_district: OverdueDistrict[];
+  by_promoter: OverduePromoter[];
+}
+
+export interface UnsoldGroup {
+  district?: string;
+  type?: string;
+  projects: number;
+  total_units: number;
+  sold_units: number;
+  unsold_units: number;
+  undisclosed: number;
+}
+export interface UnsoldInventory {
+  total_units: number;
+  sold_units: number;
+  unsold_units: number;
+  undisclosed_projects: number;
+  by_district: UnsoldGroup[];
+  by_type: UnsoldGroup[];
+}
+
+export interface PipelineYear {
+  year: number;
+  projects: number;
+  units: number;
+}
+
+export interface RegistrationTrend {
+  granularity: string;
+  by_type: boolean;
+  periods: string[];
+  series: { name: string; data: number[] }[];
+}
+
+export interface ProjectMix {
+  districts: string[];
+  types: string[];
+  data: { district: string; type: string; count: number }[];
+}
+
+export interface Concentration {
+  total_units: number;
+  top10_units: number;
+  top10_share: number | null;
+  promoters: number;
+  single_project_promoters: number;
 }

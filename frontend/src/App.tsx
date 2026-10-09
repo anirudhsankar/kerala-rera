@@ -10,6 +10,8 @@ import ProjectDetail from "./pages/ProjectDetail";
 import DataQuality from "./pages/DataQuality";
 import Find from "./pages/Find";
 import History from "./pages/History";
+import Overdue from "./pages/Overdue";
+import Market from "./pages/Market";
 import { Icon } from "./components/ui";
 import { useTheme } from "./theme";
 
@@ -66,6 +68,8 @@ export default function App() {
             <NavLink to="/districts">Districts</NavLink>
             <NavLink to="/builders">Builders</NavLink>
             <NavLink to="/projects">Projects</NavLink>
+            <NavLink to="/overdue">Overdue</NavLink>
+            <NavLink to="/market">Market</NavLink>
             <NavLink to="/history">History</NavLink>
             <NavLink to="/data">About the data</NavLink>
           </nav>
@@ -91,6 +95,8 @@ export default function App() {
           <Route path="/builders/:id" element={<BuilderDetail />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/project" element={<ProjectDetail />} />
+          <Route path="/overdue" element={<Overdue />} />
+          <Route path="/market" element={<Market />} />
           <Route path="/history" element={<History />} />
           <Route path="/data" element={<DataQuality />} />
           <Route path="*" element={<div className="state">Page not found.</div>} />

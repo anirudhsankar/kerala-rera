@@ -240,3 +240,59 @@ def changes(
 @app.get("/api/history/summary", tags=["history"])
 def history_summary(session: SessionDep) -> dict:
     return queries.history_summary(session)
+
+
+@app.get("/api/overdue", tags=["overdue"])
+def overdue(
+    session: SessionDep,
+    district: str | None = None,
+    promoter_id: int | None = None,
+    min_days: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict:
+    return queries.overdue_projects(
+        session,
+        district=district,
+        promoter_id=promoter_id,
+        min_days=min_days,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/api/overdue/summary", tags=["overdue"])
+def overdue_summary_endpoint(
+    session: SessionDep,
+    min_days: Annotated[int, Query(ge=0)] = 0,
+) -> dict:
+    return queries.overdue_summary(session, min_days=min_days)
+
+
+@app.get("/api/market/unsold", tags=["market"])
+def market_unsold(session: SessionDep) -> dict:
+    return queries.unsold_inventory(session)
+
+
+@app.get("/api/market/pipeline", tags=["market"])
+def market_pipeline(session: SessionDep) -> list[dict]:
+    return queries.supply_pipeline(session)
+
+
+@app.get("/api/market/registrations", tags=["market"])
+def market_registrations(
+    session: SessionDep,
+    granularity: Annotated[str, Query(pattern="^(month|quarter|year)$")] = "month",
+    by_type: bool = False,
+) -> dict:
+    return queries.registration_trend(session, granularity=granularity, by_type=by_type)
+
+
+@app.get("/api/market/mix", tags=["market"])
+def market_mix(session: SessionDep) -> dict:
+    return queries.project_mix_by_district(session)
+
+
+@app.get("/api/market/concentration", tags=["market"])
+def market_concentration(session: SessionDep) -> dict:
+    return queries.builder_concentration(session)

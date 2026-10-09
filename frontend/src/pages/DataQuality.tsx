@@ -48,6 +48,25 @@ export default function DataQualityPage() {
         </p>
       </Card>
 
+      <Card title="How to read the numbers">
+        <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8, fontSize: 13.5 }}>
+          <li>
+            <strong>“Not disclosed” units</strong> — some projects (mostly plots)
+            do not report a total unit count. We show <em>Not disclosed</em>
+            rather than 0, and leave them out of sold-% calculations.
+          </li>
+          <li>
+            <strong>“Sold &gt; total”</strong> — a few projects report more sold
+            units than planned units. We flag these as likely source data errors.
+          </li>
+          <li>
+            <strong>“Overdue” / past declared completion</strong> — this compares
+            today’s date with the completion date a promoter declared. It is a
+            factual date comparison, not a regulatory finding about the project.
+          </li>
+        </ul>
+      </Card>
+
       <div className="kpis">
         <Kpi icon="layers" tone="brand" label="Quality checks" value={fmtInt(d.total)} />
         <Kpi icon="clock" tone="slate" label="Errors" value={fmtInt(severity.ERROR ?? 0)} />

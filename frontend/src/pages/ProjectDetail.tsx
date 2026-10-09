@@ -1,6 +1,6 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { EChart } from "../components/EChart";
-import { Card, ErrorBox, Loader, Table, fmtDate, fmtInt, type Column } from "../components/ui";
+import { Card, ErrorBox, Loader, Table, fmtDate, fmtInt, fmtUnits, type Column } from "../components/ui";
 import { useApi, type ChangeEvent, type ProjectDetail, type Snapshot } from "../api";
 
 export default function ProjectDetailPage() {
@@ -71,9 +71,24 @@ export default function ProjectDetailPage() {
             <dt>Certificate date</dt>
             <dd>{fmtDate(p.certificate_date)}</dd>
             <dt>Total units</dt>
-            <dd>{fmtInt(p.total_units)}</dd>
+            <dd>{fmtUnits(p.total_units)}</dd>
             <dt>Sold units</dt>
-            <dd>{fmtInt(p.sold_units)}</dd>
+            <dd>
+              {fmtInt(p.sold_units)}
+              {p.total_units !== null &&
+                p.sold_units !== null &&
+                p.sold_units > p.total_units && (
+                  <span className="badge review" style={{ marginLeft: 8 }}>
+                    sold &gt; total
+                  </span>
+                )}
+            </dd>
+            <dt>Unsold / left</dt>
+            <dd>
+              {p.total_units === null || p.sold_units === null
+                ? "Not disclosed"
+                : fmtInt(Math.max(0, p.total_units - p.sold_units))}
+            </dd>
             <dt>District / Taluk / Village</dt>
             <dd>
               {p.district ?? "—"} · {p.taluk ?? "—"} · {p.village ?? "—"}

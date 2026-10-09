@@ -9,6 +9,9 @@ export const fmtPct = (x: number | null | undefined): string =>
 export const fmtDate = (s: string | null | undefined): string =>
   s ? s.slice(0, 10) : "—";
 
+export const fmtUnits = (n: number | null | undefined): string =>
+  n === null || n === undefined ? "Not disclosed" : n.toLocaleString("en-IN");
+
 export type IconName =
   | "building"
   | "home"

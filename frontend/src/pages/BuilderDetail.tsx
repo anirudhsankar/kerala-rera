@@ -42,6 +42,15 @@ export default function BuilderDetailPage() {
         <Kpi icon="home" tone="ocean" label="Units planned" value={fmtInt(s.total_units)} />
         <Kpi icon="tag" tone="saffron" label="Units sold" value={fmtInt(s.sold_units)} />
         <Kpi icon="percent" tone="plum" label="Share sold" value={fmtPct(s.sell_through)} />
+        <Kpi icon="clock" tone="slate" label="Completed" value={fmtInt(s.completed)} />
+        <Kpi icon="layers" tone="ocean" label="In progress" value={fmtInt(s.inprogress)} />
+        <Kpi icon="clock" tone="saffron" label="Past declared completion" value={fmtInt(s.past_due_count)} />
+        <Kpi
+          icon="percent"
+          tone="slate"
+          label="Avg days past completion"
+          value={s.avg_days_past_completion === null ? "—" : Math.round(s.avg_days_past_completion)}
+        />
       </div>
 
       <div className="grid">

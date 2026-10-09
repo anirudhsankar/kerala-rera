@@ -306,6 +306,16 @@ def builder_detail(session: Session, promoter_id: int) -> dict[str, Any] | None:
             by_type.get(project.project_type or "Unknown", 0) + 1
         )
 
+    today = date.today()
+    completed = sum(1 for p in projects if p.project_status == "Completed")
+    past_due_days = [
+        (today - p.declared_completion_date).days
+        for p in projects
+        if p.declared_completion_date
+        and p.declared_completion_date < today
+        and p.project_status != "Completed"
+    ]
+
     return {
         "promoter_id": promoter.id,
         "name": promoter.canonical_name,
@@ -316,6 +326,12 @@ def builder_detail(session: Session, promoter_id: int) -> dict[str, Any] | None:
             "total_units": total_units,
             "sold_units": sold_units,
             "sell_through": _sell_through(sold_units, total_units),
+            "completed": completed,
+            "inprogress": len(projects) - completed,
+            "past_due_count": len(past_due_days),
+            "avg_days_past_completion": (
+                round(sum(past_due_days) / len(past_due_days), 1) if past_due_days else None
+            ),
         },
         "by_district": [
             {"district": name, "count": count}
@@ -944,4 +960,254 @@ def history_summary(session: Session) -> dict[str, Any]:
             "History is appended on every ingestion. Charts populate as new "
             "exports are ingested; a single baseline produces one snapshot per project."
         ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Overdue / past declared completion
+# ---------------------------------------------------------------------------
+def _overdue_rows(session: Session, district: str | None = None, promoter_id: int | None = None):
+    today = date.today()
+    filters: list[Any] = [
+        Project.declared_completion_date.is_not(None),
+        Project.declared_completion_date < today,
+        or_(Project.project_status.is_(None), Project.project_status != "Completed"),
+    ]
+    if district:
+        filters.append(Project.district == district)
+    if promoter_id:
+        filters.append(Project.promoter_id == promoter_id)
+    projects = session.execute(select(Project).where(*filters)).scalars().all()
+    rows: list[tuple[Project, int]] = []
+    for p in projects:
+        if p.declared_completion_date is None:
+            continue
+        rows.append((p, (today - p.declared_completion_date).days))
+    rows.sort(key=lambda item: item[1], reverse=True)
+    return rows, today
+
+
+def overdue_projects(
+    session: Session,
+    *,
+    district: str | None = None,
+    promoter_id: int | None = None,
+    min_days: int = 0,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict[str, Any]:
+    rows, today = _overdue_rows(session, district, promoter_id)
+    if min_days:
+        rows = [row for row in rows if row[1] >= min_days]
+    total = len(rows)
+    items = []
+    for project, days in rows[offset : offset + limit]:
+        item = _project_brief(project)
+        item["days_past_completion"] = days
+        items.append(item)
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "min_days": min_days,
+        "as_of": today.isoformat(),
+        "items": items,
+    }
+
+
+def overdue_summary(session: Session, *, min_days: int = 0, top: int = 15) -> dict[str, Any]:
+    rows, today = _overdue_rows(session)
+    if min_days:
+        rows = [row for row in rows if row[1] >= min_days]
+
+    ids = {p.promoter_id for p, _ in rows if p.promoter_id}
+    names = dict(
+        session.execute(select(Promoter.id, Promoter.canonical_name).where(Promoter.id.in_(ids))).all()
+    ) if ids else {}
+
+    by_district: dict[str, dict[str, int]] = {}
+    by_promoter: dict[int, dict[str, int]] = {}
+    total_days = 0
+    for project, days in rows:
+        total_days += days
+        d = project.district or "Unknown"
+        bucket = by_district.setdefault(d, {"count": 0, "sum": 0})
+        bucket["count"] += 1
+        bucket["sum"] += days
+        if project.promoter_id:
+            pb = by_promoter.setdefault(project.promoter_id, {"count": 0, "sum": 0})
+            pb["count"] += 1
+            pb["sum"] += days
+
+    districts: list[dict[str, Any]] = [
+        {"district": k, "count": v["count"], "avg_days": round(v["sum"] / v["count"], 1)}
+        for k, v in by_district.items()
+    ]
+    districts.sort(key=lambda x: (-int(x["count"]), -float(x["avg_days"])))
+    promoters: list[dict[str, Any]] = [
+        {
+            "promoter_id": k,
+            "name": names.get(k, "Unknown"),
+            "count": v["count"],
+            "avg_days": round(v["sum"] / v["count"], 1),
+        }
+        for k, v in by_promoter.items()
+    ]
+    promoters.sort(key=lambda x: (-int(x["count"]), -float(x["avg_days"])))
+
+    return {
+        "total": len(rows),
+        "avg_days_past_completion": round(total_days / len(rows), 1) if rows else None,
+        "min_days": min_days,
+        "as_of": today.isoformat(),
+        "by_district": districts,
+        "by_promoter": promoters[:top],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Market analytics
+# ---------------------------------------------------------------------------
+def unsold_inventory(session: Session) -> dict[str, Any]:
+    projects = session.execute(select(Project)).scalars().all()
+
+    def _group(key_fn) -> dict[str, dict[str, int]]:
+        groups: dict[str, dict[str, int]] = {}
+        for p in projects:
+            g = groups.setdefault(key_fn(p), {"projects": 0, "total_units": 0, "sold_units": 0, "undisclosed": 0})
+            g["projects"] += 1
+            if p.total_units is None:
+                g["undisclosed"] += 1
+            else:
+                g["total_units"] += p.total_units
+            g["sold_units"] += p.sold_units or 0
+        return groups
+
+    def _to_list(groups: dict[str, dict[str, int]], key: str) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = [
+            {
+                key: k,
+                "projects": v["projects"],
+                "total_units": v["total_units"],
+                "sold_units": v["sold_units"],
+                "unsold_units": v["total_units"] - v["sold_units"],
+                "undisclosed": v["undisclosed"],
+            }
+            for k, v in groups.items()
+        ]
+        out.sort(key=lambda x: -int(x["unsold_units"]))
+        return out
+
+    total_units = sum(p.total_units or 0 for p in projects)
+    sold_units = sum(p.sold_units or 0 for p in projects)
+    return {
+        "total_units": total_units,
+        "sold_units": sold_units,
+        "unsold_units": total_units - sold_units,
+        "undisclosed_projects": sum(1 for p in projects if p.total_units is None),
+        "by_district": _to_list(_group(lambda p: p.district or "Unknown"), "district"),
+        "by_type": _to_list(_group(lambda p: p.project_type or "Unknown"), "type"),
+    }
+
+
+def supply_pipeline(session: Session) -> list[dict[str, Any]]:
+    filters: list[Any] = [
+        Project.declared_completion_date.is_not(None),
+        or_(Project.project_status.is_(None), Project.project_status != "Completed"),
+    ]
+    projects = session.execute(select(Project).where(*filters)).scalars().all()
+    groups: dict[int, dict[str, int]] = {}
+    for p in projects:
+        if p.declared_completion_date is None:
+            continue
+        year = p.declared_completion_date.year
+        g = groups.setdefault(year, {"projects": 0, "units": 0})
+        g["projects"] += 1
+        g["units"] += p.total_units or 0
+    return [
+        {"year": year, "projects": v["projects"], "units": v["units"]}
+        for year, v in sorted(groups.items())
+    ]
+
+
+def registration_trend(
+    session: Session, granularity: str = "month", by_type: bool = False
+) -> dict[str, Any]:
+    raw = session.execute(
+        select(Project.certificate_date, Project.project_type).where(
+            Project.certificate_date.is_not(None)
+        )
+    ).all()
+    rows = [(d, t) for d, t in raw if d is not None]
+
+    def _period(d: date) -> str:
+        if granularity == "quarter":
+            return f"{d.year}-Q{(d.month - 1) // 3 + 1}"
+        if granularity == "year":
+            return str(d.year)
+        return f"{d.year}-{d.month:02d}"
+
+    periods = sorted({_period(d) for d, _ in rows})
+    series: list[dict[str, Any]]
+    if by_type:
+        types = sorted({t or "Unknown" for _, t in rows})
+        type_counts: dict[tuple[str, str], int] = {}
+        for d, t in rows:
+            key = (t or "Unknown", _period(d))
+            type_counts[key] = type_counts.get(key, 0) + 1
+        series = [
+            {"name": t, "data": [type_counts.get((t, p), 0) for p in periods]}
+            for t in types
+        ]
+    else:
+        flat_counts: dict[str, int] = {}
+        for d, _ in rows:
+            flat_counts[_period(d)] = flat_counts.get(_period(d), 0) + 1
+        series = [
+            {"name": "Registrations", "data": [flat_counts.get(p, 0) for p in periods]}
+        ]
+    return {
+        "granularity": granularity,
+        "by_type": by_type,
+        "periods": periods,
+        "series": series,
+    }
+
+
+def project_mix_by_district(session: Session) -> dict[str, Any]:
+    rows = session.execute(
+        select(Project.district, Project.project_type, func.count()).group_by(
+            Project.district, Project.project_type
+        )
+    ).all()
+    data = [
+        {"district": d or "Unknown", "type": t or "Unknown", "count": c} for d, t, c in rows
+    ]
+    return {
+        "districts": sorted({x["district"] for x in data}),
+        "types": sorted({x["type"] for x in data}),
+        "data": data,
+    }
+
+
+def builder_concentration(session: Session) -> dict[str, Any]:
+    rows = session.execute(
+        select(
+            Project.promoter_id,
+            func.coalesce(func.sum(Project.total_units), 0),
+            func.count(),
+        ).group_by(Project.promoter_id)
+    ).all()
+    units_by_promoter: list[tuple[int | None, int, int]] = [
+        (pid, int(u or 0), int(c)) for pid, u, c in rows
+    ]
+    total_units = sum(u for _, u, _ in units_by_promoter)
+    by_units = sorted(units_by_promoter, key=lambda r: r[1], reverse=True)
+    top10 = sum(r[1] for r in by_units[:10])
+    return {
+        "total_units": total_units,
+        "top10_units": top10,
+        "top10_share": round(top10 / total_units, 4) if total_units else None,
+        "promoters": sum(1 for pid, _, _ in units_by_promoter if pid is not None),
+        "single_project_promoters": sum(1 for _, _, c in units_by_promoter if c == 1),
     }
